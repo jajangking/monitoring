@@ -12,6 +12,7 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
 - Pengaturan tanggal dan rentang waktu untuk analisis data
 - Fungsi atur ulang data
 - Dukungan tema gelap & terang
+- Sinkronisasi data dengan Supabase (dapat digunakan secara offline dengan AsyncStorage sebagai fallback)
 
 ## Instalasi
 
@@ -24,7 +25,19 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
    npm install
    ```
 
-5. Jalankan aplikasi:
+5. (Opsional) Untuk menggunakan database Supabase, buat file `.env` di direktori utama dan tambahkan variabel lingkungan:
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+   Lihat file SUPABASE_SETUP.md untuk instruksi lengkap.
+
+6. Buat tabel database di Supabase:
+   - Jalankan perintah `node setup.mjs` untuk mendapatkan SQL yang perlu dijalankan
+   - Salin dan tempel SQL tersebut ke editor SQL Supabase (Database → SQL Editor)
+   - Klik "Run" untuk membuat tabel
+
+7. Jalankan aplikasi:
 
    ```bash
    npx expo start
@@ -43,7 +56,8 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
 - React Native
 - Expo
 - TypeScript
-- AsyncStorage untuk penyimpanan lokal
+- Supabase untuk penyimpanan data di cloud
+- AsyncStorage untuk penyimpanan lokal sebagai fallback
 
 ## Struktur Proyek
 
@@ -57,6 +71,9 @@ monitoring/
 │   └── OilChangeTracker.tsx
 ├── models/
 ├── utils/
+├── SUPABASE_SETUP.md
+├── supabase_migrations.sql
+├── setup.mjs
 └── README.md
 ```
 
