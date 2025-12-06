@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Alert, Pressable, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Alert, Pressable, ScrollView, RefreshControl, Appearance } from 'react-native';
 import { DataModel, Order } from '../models/DataModel';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface OrderFormProps {
   onSubmit: (order: Omit<Order, 'id'>) => void;
@@ -17,6 +18,44 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
   const [date, setDate] = useState<string>(order?.date || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>(order?.description || '');
   const [useFixedPrice, setUseFixedPrice] = useState<boolean>(!!order?.quantity); // Use fixed price if quantity exists
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+
+  // Load theme preference
+  useEffect(() => {
+    const loadTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      } else {
+        // Default to system preference if no saved theme
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    };
+
+    loadTheme();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      const savedTheme = AsyncStorage.getItem('theme');
+      savedTheme.then(theme => {
+        if (theme) {
+          const saved = theme as 'light' | 'dark' | 'system';
+          if (saved === 'system') {
+            setIsDarkMode(Appearance.getColorScheme() === 'dark');
+          }
+        } else {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        }
+      });
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   // Update amount when quantity or price changes (only when using fixed price)
   useEffect(() => {
@@ -111,13 +150,20 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
     }
   };
 
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
-    <View style={styles.formContainer}>
+    <View style={[styles.formContainer, { backgroundColor: themeColors.cardBackground }]}>
       <View style={styles.switchContainer}>
-        <Text style={styles.label}>Order Type:</Text>
-        <View style={styles.switchOptionContainer}>
+        <Text style={[styles.label, { color: themeColors.text }]}>Tipe Pesanan:</Text>
+        <View style={[styles.switchOptionContainer, { backgroundColor: themeColors.cardHeader }]}>
           <Pressable
-            style={[styles.switchOption, !useFixedPrice && styles.activeSwitchOption]}
+            style={[styles.switchOption, !useFixedPrice && styles.activeSwitchOption, { backgroundColor: !useFixedPrice ? themeColors.activeTabBackground : themeColors.cardBackground }]}
             onPress={() => {
               setUseFixedPrice(false);
               // When switching to custom, clear the fixed price fields but preserve the current amount
@@ -125,10 +171,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
               setPricePerItem('');
             }}
           >
-            <Text style={[styles.switchText, !useFixedPrice && styles.activeSwitchText]}>Custom Price</Text>
+            <Text style={[styles.switchText, !useFixedPrice && styles.activeSwitchText, { color: !useFixedPrice ? themeColors.activeTabText : themeColors.text }]}>Harga Kustom</Text>
           </Pressable>
           <Pressable
-            style={[styles.switchOption, useFixedPrice && styles.activeSwitchOption]}
+            style={[styles.switchOption, useFixedPrice && styles.activeSwitchOption, { backgroundColor: useFixedPrice ? themeColors.activeTabBackground : themeColors.cardBackground }]}
             onPress={() => {
               setUseFixedPrice(true);
               // When switching to fixed price mode,
@@ -139,88 +185,88 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
               }
             }}
           >
-            <Text style={[styles.switchText, useFixedPrice && styles.activeSwitchText]}>Fixed Price + Qty</Text>
+            <Text style={[styles.switchText, useFixedPrice && styles.activeSwitchText, { color: useFixedPrice ? themeColors.activeTabText : themeColors.text }]}>Harga Tetap + Jumlah</Text>
           </Pressable>
         </View>
       </View>
 
       {useFixedPrice ? (
         <>
-          <Text style={styles.label}>Price Per Item (Rp)</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>Harga Per Item (Rp)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
             value={pricePerItem}
             onChangeText={handlePricePerItemChange}
-            placeholder="Enter price per item"
+            placeholder="Masukkan harga per item"
             keyboardType="numeric"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={themeColors.placeholderText}
           />
 
-          <Text style={styles.label}>Quantity</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>Jumlah</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
             value={quantity}
             onChangeText={handleQuantityChange}
-            placeholder="Enter quantity"
+            placeholder="Masukkan jumlah"
             keyboardType="numeric"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={themeColors.placeholderText}
           />
 
-          <Text style={styles.label}>Total Amount (Rp) - Calculated</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>Total (Rp) - Dihitung</Text>
           <TextInput
-            style={[styles.input, styles.calculatedAmountInput]}
+            style={[styles.input, styles.calculatedAmountInput, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
             value={amount}
             onChangeText={setAmount}
-            placeholder="Total amount"
+            placeholder="Total"
             keyboardType="numeric"
             editable={false}
-            placeholderTextColor="#aaa"
+            placeholderTextColor={themeColors.placeholderText}
           />
         </>
       ) : (
         <>
-          <Text style={styles.label}>Total Amount (Rp)</Text>
+          <Text style={[styles.label, { color: themeColors.text }]}>Total (Rp)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
             value={amount}
             onChangeText={setAmount}
-            placeholder="Enter total amount"
+            placeholder="Masukkan total"
             keyboardType="numeric"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={themeColors.placeholderText}
           />
         </>
       )}
 
-      <Text style={styles.label}>Date</Text>
+      <Text style={[styles.label, { color: themeColors.text }]}>Tanggal</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
         value={date}
         onChangeText={setDate}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor="#aaa"
+        placeholderTextColor={themeColors.placeholderText}
       />
 
-      <Text style={styles.label}>Description</Text>
+      <Text style={[styles.label, { color: themeColors.text }]}>Deskripsi</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
         value={description}
         onChangeText={setDescription}
-        placeholder="Enter description (optional)"
-        placeholderTextColor="#aaa"
+        placeholder="Masukkan deskripsi (opsional)"
+        placeholderTextColor={themeColors.placeholderText}
       />
 
       <View style={styles.buttonContainer}>
         <Pressable
-          style={({ pressed }) => [styles.submitButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.submitButton, pressed && styles.pressedButton, { backgroundColor: themeColors.positive }]}
           onPress={handleSubmit}
         >
-          <Text style={styles.submitButtonText}>{isEditing ? "Update" : "Add"}</Text>
+          <Text style={[styles.submitButtonText, { color: themeColors.buttonText }]}>{isEditing ? "Perbarui" : "Tambah"}</Text>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton, { backgroundColor: themeColors.negative }]}
           onPress={onCancel}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={[styles.cancelButtonText, { color: themeColors.buttonText }]} >Batal</Text>
         </Pressable>
       </View>
     </View>
@@ -234,24 +280,70 @@ interface OrderItemProps {
 }
 
 const OrderItem: React.FC<OrderItemProps> = ({ order, onEdit, onDelete }) => {
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+
+  // Load theme preference
+  useEffect(() => {
+    const loadTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      } else {
+        // Default to system preference if no saved theme
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    };
+
+    loadTheme();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      const savedTheme = AsyncStorage.getItem('theme');
+      savedTheme.then(theme => {
+        if (theme) {
+          const saved = theme as 'light' | 'dark' | 'system';
+          if (saved === 'system') {
+            setIsDarkMode(Appearance.getColorScheme() === 'dark');
+          }
+        } else {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        }
+      });
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
-    <View style={styles.itemContainer}>
+    <View style={[styles.itemContainer, { backgroundColor: themeColors.cardBackground }]}>
       <View style={styles.itemHeader}>
-        <Text style={styles.itemDate}>{new Date(order.date).toLocaleDateString()}</Text>
-        <Text style={styles.itemAmount}>Rp {order.amount.toLocaleString()}</Text>
+        <Text style={[styles.itemDate, { color: themeColors.text }]}>{new Date(order.date).toLocaleDateString()}</Text>
+        <Text style={[styles.itemAmount, { color: themeColors.positive }]}>Rp {order.amount.toLocaleString()}</Text>
       </View>
       {order.quantity && order.pricePerItem ? (
         <View style={styles.itemDetails}>
-          <Text style={styles.itemDetail}>Qty: {order.quantity} × Rp {order.pricePerItem.toLocaleString()}</Text>
+          <Text style={[styles.itemDetail, { color: themeColors.textSecondary }]}>Qty: {order.quantity} × Rp {order.pricePerItem.toLocaleString()}</Text>
         </View>
       ) : null}
-      {order.description ? <Text style={styles.itemDescription}>{order.description}</Text> : null}
+      {order.description ? <Text style={[styles.itemDescription, { color: themeColors.textSecondary }]}>{order.description}</Text> : null}
       <View style={styles.itemActions}>
-        <Pressable onPress={() => onEdit(order)} style={({ pressed }) => [styles.actionButton, pressed && styles.pressedButton]}>
-          <Text style={styles.actionButtonText}>Edit</Text>
+        <Pressable onPress={() => onEdit(order)} style={({ pressed }) => [styles.actionButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}>
+          <Text style={[styles.actionButtonText, { color: themeColors.buttonText }]}>Edit</Text>
         </Pressable>
-        <Pressable onPress={() => onDelete(order.id)} style={({ pressed }) => [styles.deleteButton, pressed && styles.pressedButton]}>
-          <Text style={styles.actionButtonText}>Delete</Text>
+        <Pressable onPress={() => onDelete(order.id)} style={({ pressed }) => [styles.deleteButton, pressed && styles.pressedButton, { backgroundColor: themeColors.negative }]}>
+          <Text style={[styles.actionButtonText, { color: themeColors.buttonText }]}>Hapus</Text>
         </Pressable>
       </View>
     </View>
@@ -263,9 +355,45 @@ export const OrderTracker: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
 
   useEffect(() => {
     loadOrders();
+
+    // Load theme preference
+    const loadTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      } else {
+        // Default to system preference if no saved theme
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    };
+
+    loadTheme();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      const savedTheme = AsyncStorage.getItem('theme');
+      savedTheme.then(theme => {
+        if (theme) {
+          const saved = theme as 'light' | 'dark' | 'system';
+          if (saved === 'system') {
+            setIsDarkMode(Appearance.getColorScheme() === 'dark');
+          }
+        } else {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        }
+      });
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const loadOrders = async () => {
@@ -293,12 +421,12 @@ export const OrderTracker: React.FC = () => {
 
   const handleDeleteOrder = async (id: string) => {
     Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this order?',
+      'Konfirmasi Hapus',
+      'Apakah Anda yakin ingin menghapus pesanan ini?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Batal', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Hapus',
           style: 'destructive',
           onPress: async () => {
             await DataModel.deleteOrder(id);
@@ -323,34 +451,46 @@ export const OrderTracker: React.FC = () => {
     setRefreshing(false);
   };
 
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: themeColors.background }]}
       contentContainerStyle={styles.scrollContent}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[themeColors.activeTabBorder]}
+          progressBackgroundColor={themeColors.background}
+        />
       }
     >
-      <Text style={styles.title}>Order Tracker</Text>
+      <Text style={[styles.title, { color: themeColors.text }]}>Pelacak Pesanan</Text>
 
       <View style={styles.header}>
         <View style={styles.searchContainer}>
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search orders..."
+            style={[styles.searchInput, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
+            placeholder="Cari pesanan..."
             value={searchText}
             onChangeText={setSearchText}
-            placeholderTextColor="#aaa"
+            placeholderTextColor={themeColors.placeholderText}
           />
         </View>
         <Pressable
-          style={({ pressed }) => [styles.addButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.addButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
           onPress={() => {
             setShowForm(!showForm);
             setEditingOrder(null);
           }}
         >
-          <Text style={styles.addButtonText}>{showForm ? "Cancel" : "Add Order"}</Text>
+          <Text style={[styles.addButtonText, { color: themeColors.buttonText }]}>{showForm ? "Batal" : "Tambah Pesanan"}</Text>
         </Pressable>
       </View>
 
@@ -381,7 +521,7 @@ export const OrderTracker: React.FC = () => {
             onDelete={handleDeleteOrder}
           />
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>No orders found</Text>}
+        ListEmptyComponent={<Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>Tidak ada pesanan ditemukan</Text>}
         scrollEnabled={false} // Disable FlatList scroll since parent ScrollView handles it
         contentContainerStyle={styles.flatListContent}
       />
@@ -389,10 +529,57 @@ export const OrderTracker: React.FC = () => {
   );
 };
 
+// Light theme colors
+const lightTheme = {
+  background: '#f0f2f5',
+  header: '#2196F3',
+  headerText: '#ffffff',
+  tabBackground: '#f5f5f5',
+  activeTabBackground: '#e3f2fd',
+  activeTabText: '#2196F3',
+  inactiveTabText: '#666666',
+  text: '#333333',
+  textSecondary: '#666666',
+  primaryButton: '#2196F3',
+  buttonText: '#ffffff',
+  cardBackground: '#ffffff',
+  cardHeader: '#f5f5f5',
+  positive: '#4CAF50',
+  negative: '#f44336',
+  dangerButton: '#f44336',
+  inputBackground: '#ffffff',
+  borderColor: '#ddd',
+  placeholderText: '#aaa',
+  activeTabBorder: '#2196F3',
+};
+
+// Dark theme colors
+const darkTheme = {
+  background: '#121212',
+  header: '#1976d2',
+  headerText: '#ffffff',
+  tabBackground: '#1e1e1e',
+  activeTabBackground: '#2c2c2c',
+  activeTabText: '#90caf9',
+  inactiveTabText: '#b0b0b0',
+  text: '#ffffff',
+  textSecondary: '#b0b0b0',
+  primaryButton: '#1976d2',
+  buttonText: '#ffffff',
+  cardBackground: '#1e1e1e',
+  cardHeader: '#2c2c2c',
+  positive: '#81c784',
+  negative: '#e57373',
+  dangerButton: '#d32f2f',
+  inputBackground: '#2c2c2c',
+  borderColor: '#555',
+  placeholderText: '#aaa',
+  activeTabBorder: '#90caf9',
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
   },
   scrollContent: {
     padding: 16,
@@ -403,7 +590,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
-    color: '#333',
   },
   header: {
     flexDirection: 'row',
@@ -417,15 +603,12 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     height: 48,
-    backgroundColor: '#fff',
-    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
     fontSize: 16,
   },
   formContainer: {
-    backgroundColor: '#fff',
     padding: 20,
     borderRadius: 12,
     marginBottom: 16,
@@ -439,12 +622,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginVertical: 8,
-    color: '#333',
   },
   input: {
     height: 48,
-    backgroundColor: '#fff',
-    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
@@ -458,7 +638,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     flex: 1,
-    backgroundColor: '#4CAF50',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -466,24 +645,20 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#f44336',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
     marginLeft: 8,
   },
   submitButtonText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: 16,
   },
   cancelButtonText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: 16,
   },
   itemContainer: {
-    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
@@ -501,16 +676,13 @@ const styles = StyleSheet.create({
   itemDate: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#555',
   },
   itemAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4CAF50',
   },
   itemDescription: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 8,
     fontStyle: 'italic',
   },
@@ -520,52 +692,42 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
   },
   actionButton: {
-    backgroundColor: '#2196F3',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
     marginLeft: 8,
   },
   deleteButton: {
-    backgroundColor: '#f44336',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
     marginLeft: 8,
   },
   actionButtonText: {
-    color: '#fff',
     fontWeight: '600',
   },
   emptyText: {
     textAlign: 'center',
     padding: 32,
     fontSize: 16,
-    color: '#999',
   },
   addButton: {
-    backgroundColor: '#2196F3',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   addButtonText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: 16,
   },
-  calculatedAmountInput: {
-    backgroundColor: '#f0f0f0',
-  },
+  calculatedAmountInput: {},
   switchContainer: {
     marginBottom: 16,
   },
   switchOptionContainer: {
     flexDirection: 'row',
-    backgroundColor: '#e0e0e0',
     borderRadius: 8,
     padding: 4,
     marginTop: 8,
@@ -576,16 +738,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 6,
   },
-  activeSwitchOption: {
-    backgroundColor: '#2196F3',
-  },
+  activeSwitchOption: {},
   switchText: {
-    color: '#666',
     fontWeight: '600',
   },
-  activeSwitchText: {
-    color: '#fff',
-  },
+  activeSwitchText: {},
   formSection: {
     marginTop: 16,
     marginBottom: 16,
@@ -598,7 +755,6 @@ const styles = StyleSheet.create({
   },
   itemDetail: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 4,
   },
   pressedButton: {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Pressable, RefreshControl, Appearance } from 'react-native';
 import { OrderTracker } from '../components/OrderTracker';
 import { FuelExpenseTracker } from '../components/FuelExpenseTracker';
 import { OilChangeTracker } from '../components/OilChangeTracker';
@@ -41,10 +41,55 @@ const Dashboard: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
+  // Add state for dark mode
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+  const [userTheme, setUserTheme] = useState<'light' | 'dark' | 'system'>('system');
+
   // Load all data and calculate summaries
   useEffect(() => {
     loadAndCalculateData();
-  }, [currentMonth, currentYear]);
+    loadThemePreference();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      if (userTheme === 'system') {
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    });
+
+    return () => subscription.remove();
+  }, [currentMonth, currentYear, userTheme]);
+
+  const loadThemePreference = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        setUserTheme(theme);
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      }
+    } catch (error) {
+      console.error('Kesalahan saat memuat preferensi tema:', error);
+    }
+  };
+
+  const saveThemePreference = async (theme: 'light' | 'dark' | 'system') => {
+    try {
+      await AsyncStorage.setItem('theme', theme);
+      setUserTheme(theme);
+      if (theme === 'system') {
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      } else {
+        setIsDarkMode(theme === 'dark');
+      }
+    } catch (error) {
+      console.error('Kesalahan saat menyimpan preferensi tema:', error);
+    }
+  };
 
   const loadAndCalculateData = async () => {
     try {
@@ -105,8 +150,8 @@ const Dashboard: React.FC = () => {
         dailyOrderCounts
       });
     } catch (error) {
-      console.error('Error calculating summaries:', error);
-      Alert.alert('Error', 'Failed to calculate summaries');
+      console.error('Kesalahan saat menghitung ringkasan:', error);
+      Alert.alert('Kesalahan', 'Gagal menghitung ringkasan');
     }
   };
 
@@ -131,21 +176,21 @@ const Dashboard: React.FC = () => {
   // Reset all data (for testing purposes)
   const resetAllData = async () => {
     Alert.alert(
-      'Confirm Reset',
-      'Are you sure you want to reset all data? This cannot be undone.',
+      'Konfirmasi Atur Ulang',
+      'Apakah Anda yakin ingin mengatur ulang semua data? Tindakan ini tidak dapat dibatalkan.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Batal', style: 'cancel' },
         {
-          text: 'Reset All',
+          text: 'Atur Ulang Semua',
           style: 'destructive',
           onPress: async () => {
             try {
               await AsyncStorage.clear();
               loadAndCalculateData();
-              Alert.alert('Success', 'All data has been reset');
+              Alert.alert('Sukses', 'Semua data telah diatur ulang');
             } catch (error) {
-              console.error('Error resetting data:', error);
-              Alert.alert('Error', 'Failed to reset data');
+              console.error('Kesalahan saat mengatur ulang data:', error);
+              Alert.alert('Kesalahan', 'Gagal mengatur ulang data');
             }
           }
         }
@@ -161,8 +206,8 @@ const Dashboard: React.FC = () => {
   // Format month-year display
   const formatMonthYear = (): string => {
     const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
     return `${monthNames[currentMonth]} ${currentYear}`;
   };
@@ -175,100 +220,130 @@ const Dashboard: React.FC = () => {
     setRefreshing(false);
   };
 
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Monitoring App</Text>
+      <View style={[styles.header, { backgroundColor: themeColors.header }]}>
+        <Text style={[styles.headerTitle, { color: themeColors.headerText }]}>Aplikasi Monitoring</Text>
       </View>
 
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'dashboard' && styles.activeTab]}
-          onPress={() => setActiveTab('dashboard')}
-        >
-          <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>Dashboard</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'orders' && styles.activeTab]}
-          onPress={() => setActiveTab('orders')}
-        >
-          <Text style={[styles.tabText, activeTab === 'orders' && styles.activeTabText]}>Orders</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'fuel' && styles.activeTab]}
-          onPress={() => setActiveTab('fuel')}
-        >
-          <Text style={[styles.tabText, activeTab === 'fuel' && styles.activeTabText]}>Fuel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'oil' && styles.activeTab]}
-          onPress={() => setActiveTab('oil')}
-        >
-          <Text style={[styles.tabText, activeTab === 'oil' && styles.activeTabText]}>Oil</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'settings' && styles.activeTab]}
-          onPress={() => setActiveTab('settings')}
-        >
-          <Text style={[styles.tabText, activeTab === 'settings' && styles.activeTabText]}>Settings</Text>
-        </TouchableOpacity>
+        <View style={styles.tabScrollView}>
+          <TouchableOpacity
+            style={[styles.tabButton, { backgroundColor: activeTab === 'dashboard' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
+            onPress={() => setActiveTab('dashboard')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={styles.tabIcon}>📊</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'dashboard' ? themeColors.activeTabText : themeColors.text }]}>Dasbor</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, { backgroundColor: activeTab === 'orders' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
+            onPress={() => setActiveTab('orders')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={styles.tabIcon}>📦</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'orders' ? themeColors.activeTabText : themeColors.text }]}>Pesanan</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, { backgroundColor: activeTab === 'fuel' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
+            onPress={() => setActiveTab('fuel')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={styles.tabIcon}>⛽</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'fuel' ? themeColors.activeTabText : themeColors.text }]}>BBM</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, { backgroundColor: activeTab === 'oil' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
+            onPress={() => setActiveTab('oil')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={styles.tabIcon}>🔧</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'oil' ? themeColors.activeTabText : themeColors.text }]}>Oli</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, { backgroundColor: activeTab === 'settings' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
+            onPress={() => setActiveTab('settings')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={styles.tabIcon}>⚙️</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'settings' ? themeColors.activeTabText : themeColors.text }]}>Pengaturan</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Main Content */}
       {activeTab === 'dashboard' && (
         <ScrollView
-          style={styles.content}
+          style={[styles.content, { backgroundColor: themeColors.background }]}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[themeColors.activeTabBorder]}
+              progressBackgroundColor={themeColors.background}
+            />
           }
         >
-          <Text style={styles.title}>Financial Summary</Text>
+          <Text style={[styles.title, { color: themeColors.text }]}>{isDarkMode ? '📊 Ringkasan Keuangan' : '📊 Ringkasan Keuangan'}</Text>
 
           {/* Month Navigation */}
           <View style={styles.monthNavigation}>
             <Pressable
-              style={({ pressed }) => [styles.navButton, pressed && styles.pressedButton]}
+              style={({ pressed }) => [styles.navButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
               onPress={() => navigateMonth('prev')}
             >
-              <Text style={styles.navButtonText}>‹ Prev</Text>
+              <Text style={[styles.navButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '‹ Sebelumnya' : '‹ Sebelumnya'}</Text>
             </Pressable>
-            <Text style={styles.monthYear}>{formatMonthYear()}</Text>
+            <Text style={[styles.monthYear, { color: themeColors.text }]}>{formatMonthYear()}</Text>
             <Pressable
-              style={({ pressed }) => [styles.navButton, pressed && styles.pressedButton]}
+              style={({ pressed }) => [styles.navButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
               onPress={() => navigateMonth('next')}
             >
-              <Text style={styles.navButtonText}>Next ›</Text>
+              <Text style={[styles.navButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? 'Berikutnya ›' : 'Berikutnya ›'}</Text>
             </Pressable>
           </View>
 
 
           {/* Monthly Summary Cards */}
           <View style={styles.monthlySummaryContainer}>
-            <Text style={styles.monthlySummaryTitle}>This Month ({formatMonthYear()})</Text>
+            <Text style={[styles.monthlySummaryTitle, { color: themeColors.text }]}>{isDarkMode ? `💰 Bulan Ini (${formatMonthYear()})` : `💰 Bulan Ini (${formatMonthYear()})`}</Text>
             <View style={styles.summaryContainer}>
-              <View style={[styles.summaryCard, styles.monthlyOrdersCard]}>
+              <View style={[styles.summaryCard, styles.monthlyOrdersCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
                 <View style={styles.cardContent}>
-                  <Text style={styles.summaryTitle}>Orders</Text>
-                  <Text style={styles.summaryValue}>{formatCurrency(summary.currentMonthOrders)}</Text>
+                  <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📦 Pesanan' : '📦 Pesanan'}</Text>
+                  <Text style={[styles.summaryValue, { color: themeColors.text }]}>{formatCurrency(summary.currentMonthOrders)}</Text>
                 </View>
               </View>
 
-              <View style={[styles.summaryCard, styles.monthlyExpensesCard]}>
+              <View style={[styles.summaryCard, styles.monthlyExpensesCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
                 <View style={styles.cardContent}>
-                  <Text style={styles.summaryTitle}>Expenses</Text>
-                  <Text style={styles.summaryValue}>{formatCurrency(summary.currentMonthExpenses)}</Text>
+                  <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '💸 Pengeluaran' : '💸 Pengeluaran'}</Text>
+                  <Text style={[styles.summaryValue, { color: themeColors.text }]}>{formatCurrency(summary.currentMonthExpenses)}</Text>
                 </View>
               </View>
 
-              <View style={[styles.summaryCard, styles.monthlyNetIncomeCard]}>
+              <View style={[styles.summaryCard, styles.monthlyNetIncomeCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
                 <View style={styles.cardContent}>
-                  <Text style={styles.summaryTitle}>Net Income</Text>
+                  <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih' : '📈 Pendapatan Bersih'}</Text>
                   <Text
                     style={[
                       styles.summaryValue,
-                      summary.currentMonthNetIncome >= 0 ? styles.positiveValue : styles.negativeValue
+                      summary.currentMonthNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
+                      { color: summary.currentMonthNetIncome >= 0 ? themeColors.positive : themeColors.negative }
                     ]}
                   >
                     {formatCurrency(summary.currentMonthNetIncome)}
@@ -280,28 +355,29 @@ const Dashboard: React.FC = () => {
 
           {/* Overall Summary Cards */}
           <View style={styles.summaryContainer}>
-            <Text style={styles.monthlySummaryTitle}>Overall Totals</Text>
-            <View style={styles.summaryCard}>
+            <Text style={[styles.monthlySummaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📋 Total Keseluruhan' : '📋 Total Keseluruhan'}</Text>
+            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
               <View style={styles.cardContent}>
-                <Text style={styles.summaryTitle}>Total Orders</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(summary.totalOrders)}</Text>
+                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📦 Total Pesanan' : '📦 Total Pesanan'}</Text>
+                <Text style={[styles.summaryValue, { color: themeColors.text }]}>{formatCurrency(summary.totalOrders)}</Text>
               </View>
             </View>
 
-            <View style={styles.summaryCard}>
+            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
               <View style={styles.cardContent}>
-                <Text style={styles.summaryTitle}>Total Expenses</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(summary.totalExpenses)}</Text>
+                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '💸 Total Pengeluaran' : '💸 Total Pengeluaran'}</Text>
+                <Text style={[styles.summaryValue, { color: themeColors.text }]}>{formatCurrency(summary.totalExpenses)}</Text>
               </View>
             </View>
 
-            <View style={styles.summaryCard}>
+            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
               <View style={styles.cardContent}>
-                <Text style={styles.summaryTitle}>Net Income (All Time)</Text>
+                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (Sepanjang Waktu)' : '📈 Pendapatan Bersih (Sepanjang Waktu)'}</Text>
                 <Text
                   style={[
                     styles.summaryValue,
-                    summary.netIncome >= 0 ? styles.positiveValue : styles.negativeValue
+                    summary.netIncome >= 0 ? styles.positiveValue : styles.negativeValue,
+                    { color: summary.netIncome >= 0 ? themeColors.positive : themeColors.negative }
                   ]}
                 >
                   {formatCurrency(summary.netIncome)}
@@ -312,14 +388,15 @@ const Dashboard: React.FC = () => {
 
           {/* Half-Month Summary Cards */}
           <View style={styles.summaryContainer}>
-            <Text style={styles.monthlySummaryTitle}>This Month Breakdown</Text>
-            <View style={styles.summaryCard}>
+            <Text style={[styles.monthlySummaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📅 Rincian Bulan Ini' : '📅 Rincian Bulan Ini'}</Text>
+            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
               <View style={styles.cardContent}>
-                <Text style={styles.summaryTitle}>Net Income (1st Half)</Text>
+                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (Awal Bulan)' : '📈 Pendapatan Bersih (Awal Bulan)'}</Text>
                 <Text
                   style={[
                     styles.summaryValue,
-                    summary.firstHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue
+                    summary.firstHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
+                    { color: summary.firstHalfNetIncome >= 0 ? themeColors.positive : themeColors.negative }
                   ]}
                 >
                   {formatCurrency(summary.firstHalfNetIncome)}
@@ -327,13 +404,14 @@ const Dashboard: React.FC = () => {
               </View>
             </View>
 
-            <View style={styles.summaryCard}>
+            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
               <View style={styles.cardContent}>
-                <Text style={styles.summaryTitle}>Net Income (2nd Half)</Text>
+                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (Akhir Bulan)' : '📈 Pendapatan Bersih (Akhir Bulan)'}</Text>
                 <Text
                   style={[
                     styles.summaryValue,
-                    summary.secondHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue
+                    summary.secondHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
+                    { color: summary.secondHalfNetIncome >= 0 ? themeColors.positive : themeColors.negative }
                   ]}
                 >
                   {formatCurrency(summary.secondHalfNetIncome)}
@@ -344,7 +422,7 @@ const Dashboard: React.FC = () => {
 
           {/* Daily Accumulation Section */}
           <View style={styles.dailyAccumulationContainer}>
-            <Text style={styles.dailyAccumulationTitle}>Daily Order Summary</Text>
+            <Text style={[styles.dailyAccumulationTitle, { color: themeColors.text }]}>{isDarkMode ? '📆 Ringkasan Harian' : '📆 Ringkasan Harian'}</Text>
             <View style={styles.dailyAccumulationList}>
               {Object.entries(summary.dailyAccumulation).length > 0 ? (
                 Object.entries(summary.dailyAccumulation)
@@ -352,17 +430,17 @@ const Dashboard: React.FC = () => {
                   .map(([date, amount]) => {
                     const orderCount = summary.dailyOrderCounts[date] || 0;
                     return (
-                      <View key={date} style={styles.dailyItem}>
+                      <View key={date} style={[styles.dailyItem, { backgroundColor: themeColors.cardBackground, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 }]}>
                         <View style={styles.dailyItemHeader}>
-                          <Text style={styles.dailyDate}>{new Date(date).toLocaleDateString()}</Text>
-                          <Text style={styles.dailyAmount}>Rp {amount.toLocaleString()}</Text>
+                          <Text style={[styles.dailyDate, { color: themeColors.text }]}>{new Date(date).toLocaleDateString()}</Text>
+                          <Text style={[styles.dailyAmount, { color: themeColors.positive }]}>{isDarkMode ? `💵 Rp ${amount.toLocaleString()}` : `💵 Rp ${amount.toLocaleString()}`}</Text>
                         </View>
-                        <Text style={styles.dailyCount}>{orderCount} order{orderCount !== 1 ? 's' : ''}</Text>
+                        <Text style={[styles.dailyCount, { color: themeColors.textSecondary }]}>{orderCount} pesanan</Text>
                       </View>
                     );
                   })
               ) : (
-                <Text style={styles.emptyText}>No orders for this month</Text>
+                <Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>{isDarkMode ? 'Tidak ada pesanan bulan ini' : 'Tidak ada pesanan bulan ini'}</Text>
               )}
             </View>
           </View>
@@ -373,14 +451,41 @@ const Dashboard: React.FC = () => {
       {activeTab === 'fuel' && <FuelExpenseTracker />}
       {activeTab === 'oil' && <OilChangeTracker />}
       {activeTab === 'settings' && (
-        <View style={styles.settingsTabContainer}>
-          <Text style={styles.settingsTabTitle}>Settings</Text>
+        <View style={[styles.settingsTabContainer, { backgroundColor: themeColors.background, padding: 16 }]}>
+          <Text style={[styles.settingsTabTitle, { color: themeColors.text }]}>{isDarkMode ? '⚙️ Pengaturan' : '⚙️ Pengaturan'}</Text>
           <View style={styles.settingsTabContent}>
+            <View style={[styles.settingsContainer, { backgroundColor: themeColors.cardBackground, borderRadius: 12, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
+              <View style={[styles.settingsHeader, { backgroundColor: themeColors.cardHeader }]}>
+                <Text style={[styles.settingsTitle, { color: themeColors.text }]}>{isDarkMode ? '🌙 Mode Gelap' : '🌙 Mode Gelap'}</Text>
+              </View>
+              <View style={styles.settingsContent}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.themeButton, userTheme === 'light' ? { backgroundColor: themeColors.primaryButton } : { backgroundColor: themeColors.cardHeader }]}
+                    onPress={() => saveThemePreference('light')}
+                  >
+                    <Text style={{ color: userTheme === 'light' ? themeColors.buttonText : themeColors.text }}>{isDarkMode ? 'Terang' : 'Terang'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.themeButton, userTheme === 'dark' ? { backgroundColor: themeColors.primaryButton } : { backgroundColor: themeColors.cardHeader }]}
+                    onPress={() => saveThemePreference('dark')}
+                  >
+                    <Text style={{ color: userTheme === 'dark' ? themeColors.buttonText : themeColors.text }}>{isDarkMode ? 'Gelap' : 'Gelap'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.themeButton, userTheme === 'system' ? { backgroundColor: themeColors.primaryButton } : { backgroundColor: themeColors.cardHeader }]}
+                    onPress={() => saveThemePreference('system')}
+                  >
+                    <Text style={{ color: userTheme === 'system' ? themeColors.buttonText : themeColors.text }}>{isDarkMode ? 'Sistem' : 'Sistem'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
             <Pressable
-              style={({ pressed }) => [styles.resetButton, pressed && styles.pressedButton]}
+              style={({ pressed }) => [styles.resetButton, pressed && styles.pressedButton, { backgroundColor: themeColors.dangerButton }]}
               onPress={resetAllData}
             >
-              <Text style={styles.resetButtonText}>Reset All Data</Text>
+              <Text style={[styles.resetButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '🗑️ Atur Ulang Semua Data' : '🗑️ Atur Ulang Semua Data'}</Text>
             </Pressable>
           </View>
         </View>
@@ -389,13 +494,59 @@ const Dashboard: React.FC = () => {
   );
 };
 
+// Light theme colors
+const lightTheme = {
+  background: '#f0f2f5',
+  header: '#2196F3',
+  headerText: '#ffffff',
+  tabBackground: '#f5f5f5',
+  activeTabBackground: '#e3f2fd',
+  activeTabText: '#2196F3',
+  inactiveTabText: '#666666',
+  text: '#333333',
+  textSecondary: '#666666',
+  primaryButton: '#2196F3',
+  buttonText: '#ffffff',
+  cardBackground: '#ffffff',
+  cardHeader: '#f5f5f5',
+  positive: '#4CAF50',
+  negative: '#f44336',
+  dangerButton: '#f44336',
+  inputBackground: '#ffffff',
+  borderColor: '#ddd',
+  placeholderText: '#aaa',
+  activeTabBorder: '#2196F3',
+};
+
+// Dark theme colors
+const darkTheme = {
+  background: '#121212',
+  header: '#1976d2',
+  headerText: '#ffffff',
+  tabBackground: '#1e1e1e',
+  activeTabBackground: '#2c2c2c',
+  activeTabText: '#90caf9',
+  inactiveTabText: '#b0b0b0',
+  text: '#ffffff',
+  textSecondary: '#b0b0b0',
+  primaryButton: '#1976d2',
+  buttonText: '#ffffff',
+  cardBackground: '#1e1e1e',
+  cardHeader: '#2c2c2c',
+  positive: '#81c784',
+  negative: '#e57373',
+  dangerButton: '#d32f2f',
+  inputBackground: '#2c2c2c',
+  borderColor: '#555',
+  placeholderText: '#aaa',
+  activeTabBorder: '#90caf9',
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
   },
   header: {
-    backgroundColor: '#2196F3',
     paddingTop: 50,
     paddingBottom: 16,
     paddingLeft: 16,
@@ -404,37 +555,49 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
     textAlign: 'center',
   },
+  headerSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+  },
   tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
+    paddingVertical: 8,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
+  tabScrollView: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
   tabButton: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: 10,
+    marginHorizontal: 2,
+    borderRadius: 12,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    justifyContent: 'center',
   },
-  activeTab: {
-    borderBottomColor: '#2196F3',
-    backgroundColor: '#e3f2fd',
+  tabContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  tabIcon: {
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  activeTab: {},
   tabText: {
-    fontSize: 16,
+    fontSize: 10,
     fontWeight: '600',
-    color: '#555',
+    textAlign: 'center',
   },
-  activeTabText: {
-    color: '#2196F3',
-  },
+  activeTabText: {},
   content: {
     flex: 1,
     padding: 16,
@@ -444,7 +607,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 16,
-    color: '#333',
   },
   monthNavigation: {
     flexDirection: 'row',
@@ -458,7 +620,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   navButton: {
-    backgroundColor: '#2196F3',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -466,13 +627,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   navButtonText: {
-    color: '#fff',
     fontWeight: '600',
   },
   monthYear: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
   },
   summaryContainer: {
     marginBottom: 24,
@@ -483,53 +642,33 @@ const styles = StyleSheet.create({
   summaryCard: {
     borderRadius: 12,
     marginBottom: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
-  ordersCard: {
-    backgroundColor: '#E8F5E9',
-  },
-  expensesCard: {
-    backgroundColor: '#FFEBEE',
-  },
-  netIncomeCard: {
-    backgroundColor: '#E3F2FD',
-  },
-  halfCard: {
-    backgroundColor: '#F3E5F5',
-  },
+  ordersCard: {},
+  expensesCard: {},
+  netIncomeCard: {},
+  halfCard: {},
   summaryTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#333',
   },
   summaryValue: {
     fontSize: 22,
     fontWeight: 'bold',
   },
-  positiveValue: {
-    color: '#4CAF50',
-  },
-  negativeValue: {
-    color: '#f44336',
-  },
+  positiveValue: {},
+  negativeValue: {},
   actionContainer: {
     alignItems: 'center',
     paddingVertical: 16,
   },
   resetButton: {
-    backgroundColor: '#f44336',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginLeft: 8,
   },
   resetButtonText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: 16,
   },
@@ -543,21 +682,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#333',
   },
   dailyAccumulationList: {
     marginBottom: 16,
   },
   dailyItem: {
-    backgroundColor: '#fff',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   dailyItemHeader: {
     flexDirection: 'row',
@@ -568,16 +700,13 @@ const styles = StyleSheet.create({
   dailyDate: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#555',
   },
   dailyAmount: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#4CAF50',
   },
   dailyCount: {
     fontSize: 14,
-    color: '#888',
     fontStyle: 'italic',
   },
   monthlySummaryContainer: {
@@ -587,27 +716,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 12,
-    color: '#333',
     textAlign: 'center',
   },
-  monthlyOrdersCard: {
-    backgroundColor: '#E8F5E9',
-  },
-  monthlyExpensesCard: {
-    backgroundColor: '#FFEBEE',
-  },
-  monthlyNetIncomeCard: {
-    backgroundColor: '#E3F2FD',
-  },
+  monthlyOrdersCard: {},
+  monthlyExpensesCard: {},
+  monthlyNetIncomeCard: {},
   settingsContainer: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     overflow: 'hidden',
   },
   settingsHeader: {
@@ -615,38 +731,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#f5f5f5',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   settingsTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
   },
   closeButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#666',
   },
   settingsContent: {
     padding: 16,
   },
   settingsTabContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 16,
   },
   settingsTabTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
-    color: '#333',
   },
   settingsTabContent: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  themeButton: {
+    padding: 10,
+    borderRadius: 8,
+    minWidth: 70,
     alignItems: 'center',
   },
 });

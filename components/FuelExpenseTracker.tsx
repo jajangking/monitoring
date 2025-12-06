@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Alert, Pressable, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Alert, Pressable, ScrollView, RefreshControl, Appearance } from 'react-native';
 import { DataModel, FuelExpense } from '../models/DataModel';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface FuelExpenseFormProps {
   onSubmit: (expense: Omit<FuelExpense, 'id'>) => void;
@@ -14,6 +15,44 @@ export const FuelExpenseForm: React.FC<FuelExpenseFormProps> = ({ onSubmit, onCa
   const [date, setDate] = useState<string>(expense?.date || new Date().toISOString().split('T')[0]);
   const [liters, setLiters] = useState<string>(expense?.liters?.toString() || '');
   const [description, setDescription] = useState<string>(expense?.description || '');
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+
+  // Load theme preference
+  useEffect(() => {
+    const loadTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      } else {
+        // Default to system preference if no saved theme
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    };
+
+    loadTheme();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      const savedTheme = AsyncStorage.getItem('theme');
+      savedTheme.then(theme => {
+        if (theme) {
+          const saved = theme as 'light' | 'dark' | 'system';
+          if (saved === 'system') {
+            setIsDarkMode(Appearance.getColorScheme() === 'dark');
+          }
+        } else {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        }
+      });
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   const handleSubmit = () => {
     if (!amount || isNaN(parseFloat(amount))) {
@@ -29,58 +68,65 @@ export const FuelExpenseForm: React.FC<FuelExpenseFormProps> = ({ onSubmit, onCa
     });
   };
 
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
-    <View style={styles.formContainer}>
-      <Text style={styles.label}>Amount (Rp)</Text>
+    <View style={[styles.formContainer, { backgroundColor: themeColors.cardBackground }]}>
+      <Text style={[styles.label, { color: themeColors.text }]}>Jumlah (Rp)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
         value={amount}
         onChangeText={setAmount}
-        placeholder="Enter amount spent"
+        placeholder="Masukkan jumlah pengeluaran"
         keyboardType="numeric"
-        placeholderTextColor="#aaa"
+        placeholderTextColor={themeColors.placeholderText}
       />
 
-      <Text style={styles.label}>Liters</Text>
+      <Text style={[styles.label, { color: themeColors.text }]}>Liter</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
         value={liters}
         onChangeText={setLiters}
-        placeholder="Enter liters (optional)"
+        placeholder="Masukkan liter (opsional)"
         keyboardType="decimal-pad"
-        placeholderTextColor="#aaa"
+        placeholderTextColor={themeColors.placeholderText}
       />
 
-      <Text style={styles.label}>Date</Text>
+      <Text style={[styles.label, { color: themeColors.text }]}>Tanggal</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
         value={date}
         onChangeText={setDate}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor="#aaa"
+        placeholderTextColor={themeColors.placeholderText}
       />
 
-      <Text style={styles.label}>Description</Text>
+      <Text style={[styles.label, { color: themeColors.text }]}>Deskripsi</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
         value={description}
         onChangeText={setDescription}
-        placeholder="Enter description (optional)"
-        placeholderTextColor="#aaa"
+        placeholder="Masukkan deskripsi (opsional)"
+        placeholderTextColor={themeColors.placeholderText}
       />
 
       <View style={styles.buttonContainer}>
         <Pressable
-          style={({ pressed }) => [styles.submitButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.submitButton, pressed && styles.pressedButton, { backgroundColor: themeColors.positive }]}
           onPress={handleSubmit}
         >
-          <Text style={styles.submitButtonText}>{isEditing ? "Update" : "Add"}</Text>
+          <Text style={styles.submitButtonText}>{isEditing ? "Perbarui" : "Tambah"}</Text>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton, { backgroundColor: themeColors.negative }]}
           onPress={onCancel}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={styles.cancelButtonText}>Batal</Text>
         </Pressable>
       </View>
     </View>
@@ -94,20 +140,66 @@ interface FuelExpenseItemProps {
 }
 
 const FuelExpenseItem: React.FC<FuelExpenseItemProps> = ({ expense, onEdit, onDelete }) => {
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+
+  // Load theme preference
+  useEffect(() => {
+    const loadTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      } else {
+        // Default to system preference if no saved theme
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    };
+
+    loadTheme();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      const savedTheme = AsyncStorage.getItem('theme');
+      savedTheme.then(theme => {
+        if (theme) {
+          const saved = theme as 'light' | 'dark' | 'system';
+          if (saved === 'system') {
+            setIsDarkMode(Appearance.getColorScheme() === 'dark');
+          }
+        } else {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        }
+      });
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
-    <View style={styles.itemContainer}>
+    <View style={[styles.itemContainer, { backgroundColor: themeColors.cardBackground }]}>
       <View style={styles.itemHeader}>
-        <Text style={styles.itemDate}>{new Date(expense.date).toLocaleDateString()}</Text>
-        <Text style={styles.itemAmount}>Rp {expense.amount.toLocaleString()}</Text>
+        <Text style={[styles.itemDate, { color: themeColors.text }]}>{new Date(expense.date).toLocaleDateString()}</Text>
+        <Text style={[styles.itemAmount, { color: themeColors.negative }]}>Rp {expense.amount.toLocaleString()}</Text>
       </View>
-      {expense.liters ? <Text style={styles.itemDetail}>Liters: {expense.liters}L</Text> : null}
-      {expense.description ? <Text style={styles.itemDescription}>{expense.description}</Text> : null}
+      {expense.liters ? <Text style={[styles.itemDetail, { color: themeColors.textSecondary }]}>Liter: {expense.liters}L</Text> : null}
+      {expense.description ? <Text style={[styles.itemDescription, { color: themeColors.textSecondary }]}>{expense.description}</Text> : null}
       <View style={styles.itemActions}>
-        <Pressable onPress={() => onEdit(expense)} style={({ pressed }) => [styles.actionButton, pressed && styles.pressedButton]}>
+        <Pressable onPress={() => onEdit(expense)} style={({ pressed }) => [styles.actionButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}>
           <Text style={styles.actionButtonText}>Edit</Text>
         </Pressable>
-        <Pressable onPress={() => onDelete(expense.id)} style={({ pressed }) => [styles.deleteButton, pressed && styles.pressedButton]}>
-          <Text style={styles.actionButtonText}>Delete</Text>
+        <Pressable onPress={() => onDelete(expense.id)} style={({ pressed }) => [styles.deleteButton, pressed && styles.pressedButton, { backgroundColor: themeColors.negative }]}>
+          <Text style={styles.actionButtonText}>Hapus</Text>
         </Pressable>
       </View>
     </View>
@@ -119,9 +211,45 @@ export const FuelExpenseTracker: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<FuelExpense | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
 
   useEffect(() => {
     loadExpenses();
+
+    // Load theme preference
+    const loadTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        const theme = savedTheme as 'light' | 'dark' | 'system';
+        if (theme === 'system') {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        } else {
+          setIsDarkMode(theme === 'dark');
+        }
+      } else {
+        // Default to system preference if no saved theme
+        setIsDarkMode(Appearance.getColorScheme() === 'dark');
+      }
+    };
+
+    loadTheme();
+
+    // Listen for appearance changes
+    const subscription = Appearance.addChangeListener(() => {
+      const savedTheme = AsyncStorage.getItem('theme');
+      savedTheme.then(theme => {
+        if (theme) {
+          const saved = theme as 'light' | 'dark' | 'system';
+          if (saved === 'system') {
+            setIsDarkMode(Appearance.getColorScheme() === 'dark');
+          }
+        } else {
+          setIsDarkMode(Appearance.getColorScheme() === 'dark');
+        }
+      });
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const loadExpenses = async () => {
@@ -149,12 +277,12 @@ export const FuelExpenseTracker: React.FC = () => {
 
   const handleDeleteExpense = async (id: string) => {
     Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this fuel expense?',
+      'Konfirmasi Hapus',
+      'Apakah Anda yakin ingin menghapus pengeluaran bahan bakar ini?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Batal', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Hapus',
           style: 'destructive',
           onPress: async () => {
             await DataModel.deleteFuelExpense(id);
@@ -180,34 +308,46 @@ export const FuelExpenseTracker: React.FC = () => {
     setRefreshing(false);
   };
 
+  // Get theme-appropriate colors
+  const getThemeColors = () => {
+    return isDarkMode ? darkTheme : lightTheme;
+  };
+
+  const themeColors = getThemeColors();
+
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: themeColors.background }]}
       contentContainerStyle={styles.scrollContent}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[themeColors.activeTabBorder]}
+          progressBackgroundColor={themeColors.background}
+        />
       }
     >
-      <Text style={styles.title}>Fuel Expense Tracker</Text>
+      <Text style={[styles.title, { color: themeColors.text }]}>Pelacak Pengeluaran BBM</Text>
 
       <View style={styles.header}>
         <View style={styles.searchContainer}>
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search expenses..."
+            style={[styles.searchInput, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
+            placeholder="Cari pengeluaran..."
             value={searchText}
             onChangeText={setSearchText}
-            placeholderTextColor="#aaa"
+            placeholderTextColor={themeColors.placeholderText}
           />
         </View>
         <Pressable
-          style={({ pressed }) => [styles.addButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.addButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
           onPress={() => {
             setShowForm(!showForm);
             setEditingExpense(null);
           }}
         >
-          <Text style={styles.addButtonText}>{showForm ? "Cancel" : "Add Expense"}</Text>
+          <Text style={styles.addButtonText}>{showForm ? "Batal" : "Tambah Pengeluaran"}</Text>
         </Pressable>
       </View>
 
@@ -238,17 +378,64 @@ export const FuelExpenseTracker: React.FC = () => {
             onDelete={handleDeleteExpense}
           />
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>No fuel expenses found</Text>}
+        ListEmptyComponent={<Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>Tidak ada pengeluaran BBM ditemukan</Text>}
         scrollEnabled={false} // Disable FlatList scroll since parent ScrollView handles it
       />
     </ScrollView>
   );
 };
 
+// Light theme colors
+const lightTheme = {
+  background: '#f0f2f5',
+  header: '#2196F3',
+  headerText: '#ffffff',
+  tabBackground: '#f5f5f5',
+  activeTabBackground: '#e3f2fd',
+  activeTabText: '#2196F3',
+  inactiveTabText: '#666666',
+  text: '#333333',
+  textSecondary: '#666666',
+  primaryButton: '#2196F3',
+  buttonText: '#ffffff',
+  cardBackground: '#ffffff',
+  cardHeader: '#f5f5f5',
+  positive: '#4CAF50',
+  negative: '#f44336',
+  dangerButton: '#f44336',
+  inputBackground: '#ffffff',
+  borderColor: '#ddd',
+  placeholderText: '#aaa',
+  activeTabBorder: '#2196F3',
+};
+
+// Dark theme colors
+const darkTheme = {
+  background: '#121212',
+  header: '#1976d2',
+  headerText: '#ffffff',
+  tabBackground: '#1e1e1e',
+  activeTabBackground: '#2c2c2c',
+  activeTabText: '#90caf9',
+  inactiveTabText: '#b0b0b0',
+  text: '#ffffff',
+  textSecondary: '#b0b0b0',
+  primaryButton: '#1976d2',
+  buttonText: '#ffffff',
+  cardBackground: '#1e1e1e',
+  cardHeader: '#2c2c2c',
+  positive: '#81c784',
+  negative: '#e57373',
+  dangerButton: '#d32f2f',
+  inputBackground: '#2c2c2c',
+  borderColor: '#555',
+  placeholderText: '#aaa',
+  activeTabBorder: '#90caf9',
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
   },
   scrollContent: {
     padding: 16,
@@ -259,7 +446,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
-    color: '#333',
   },
   header: {
     flexDirection: 'row',
@@ -273,15 +459,12 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     height: 48,
-    backgroundColor: '#fff',
-    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
     fontSize: 16,
   },
   formContainer: {
-    backgroundColor: '#fff',
     padding: 20,
     borderRadius: 12,
     marginBottom: 16,
@@ -295,12 +478,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginVertical: 8,
-    color: '#333',
   },
   input: {
     height: 48,
-    backgroundColor: '#fff',
-    borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
@@ -314,7 +494,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     flex: 1,
-    backgroundColor: '#4CAF50',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -322,24 +501,22 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#f44336',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
     marginLeft: 8,
   },
   submitButtonText: {
-    color: '#fff',
+    color: '#060621',
     fontWeight: '600',
     fontSize: 16,
   },
   cancelButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontWeight: '600',
     fontSize: 16,
   },
   itemContainer: {
-    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
@@ -357,21 +534,17 @@ const styles = StyleSheet.create({
   itemDate: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#555',
   },
   itemAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#f44336',
   },
   itemDetail: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 4,
   },
   itemDescription: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 8,
     fontStyle: 'italic',
   },
@@ -381,40 +554,35 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
   },
   actionButton: {
-    backgroundColor: '#2196F3',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
     marginLeft: 8,
   },
   deleteButton: {
-    backgroundColor: '#f44336',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
     marginLeft: 8,
   },
   actionButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontWeight: '600',
   },
   emptyText: {
     textAlign: 'center',
     padding: 32,
     fontSize: 16,
-    color: '#999',
   },
   addButton: {
-    backgroundColor: '#2196F3',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   addButtonText: {
-    color: '#fff',
+    color: '#060621',
     fontWeight: '600',
     fontSize: 16,
   },
