@@ -25,14 +25,22 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
    npm install
    ```
 
-5. (Opsional) Untuk menggunakan database Supabase, buat file `.env` di direktori utama dan tambahkan variabel lingkungan:
+5. Untuk mengkonfigurasi API dan database, buat file `.env` di direktori utama dan tambahkan variabel lingkungan:
    ```
-   EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-   Lihat file SUPABASE_SETUP.md untuk instruksi lengkap.
+   # API Keys
+   EXPO_PUBLIC_GROQ_API_KEY=your_groq_api_key_here
 
-6. Buat tabel database di Supabase:
+   # Supabase Configuration
+   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url_here
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+   # Server Configuration
+   GROQ_API_KEY=your_groq_api_key_here
+   PORT=3000
+   ```
+   Lihat file ENV_SETUP.md untuk instruksi lengkap cara mendapatkan API keys.
+
+6. (Opsional) Jika ingin menggunakan Supabase, buat tabel database di Supabase:
    - Jalankan perintah `node setup.mjs` untuk mendapatkan SQL yang perlu dijalankan
    - Salin dan tempel SQL tersebut ke editor SQL Supabase (Database → SQL Editor)
    - Klik "Run" untuk membuat tabel
