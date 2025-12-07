@@ -302,7 +302,7 @@ export const OilChangeTracker: React.FC = () => {
   };
 
   const filteredChanges = changes.filter(change =>
-    change.description.toLowerCase().includes(searchText.toLowerCase()) ||
+    (change.description || '').toLowerCase().includes(searchText.toLowerCase()) ||
     change.amount.toString().includes(searchText) ||
     change.mileage?.toString().includes(searchText) ||
     new Date(change.date).toLocaleDateString().includes(searchText)

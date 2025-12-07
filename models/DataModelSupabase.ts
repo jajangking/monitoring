@@ -9,6 +9,8 @@ export interface Order {
   description?: string;
   quantity?: number; // for multiple fixed-price items
   pricePerItem?: number; // for fixed price items
+  // Supabase returns snake_case columns
+  price_per_item?: number;
 }
 
 export interface FuelExpense {
@@ -76,7 +78,9 @@ export class DataModelSupabase {
         price_per_item: order.pricePerItem,  // Map camelCase to snake_case
       };
       // Remove the original camelCase property to avoid conflicts
-      delete orderForDb.pricePerItem;
+      if (orderForDb.pricePerItem !== undefined) {
+        delete (orderForDb as any).pricePerItem;
+      }
 
       const { data, error } = await supabase
         .from('orders')

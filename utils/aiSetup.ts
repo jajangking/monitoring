@@ -27,6 +27,32 @@ export const isAIReady = (): boolean => {
   return true; // Always return true in this mock implementation
 };
 
+// Store the session ID for the current conversation
+let currentSessionId: string = 'default';
+
+/**
+ * Sets the session ID for the current conversation
+ * @param sessionId - Unique identifier for the conversation session
+ */
+export const setAISession = (sessionId: string): void => {
+  currentSessionId = sessionId;
+};
+
+/**
+ * Gets the current session ID
+ * @returns The current session ID
+ */
+export const getAISession = (): string => {
+  return currentSessionId;
+};
+
+/**
+ * Reset the current conversation session
+ */
+export const resetAISession = (): void => {
+  enhancedAIService.resetConversationContext(currentSessionId);
+};
+
 /**
  * Sends a message to the AI service
  * @param message - The message to send to the AI
@@ -34,8 +60,8 @@ export const isAIReady = (): boolean => {
  */
 export const sendToAI = async (message: string): Promise<string> => {
   try {
-    // Use the enhanced AI service for better responses
-    return await enhancedAIService.getEnhancedAIResponse(message);
+    // Use the enhanced AI service for better responses with session context
+    return await enhancedAIService.getEnhancedAIResponse(message, undefined, currentSessionId);
   } catch (error) {
     console.error('Error in sendToAI:', error);
     // Return a generic response if there's an error

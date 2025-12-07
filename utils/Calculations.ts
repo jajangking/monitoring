@@ -1,4 +1,4 @@
-import { Order, FuelExpense, OilChange } from './models/DataModel';
+import { Order, FuelExpense, OilChange } from '../models/DataModel';
 
 interface DateRange {
   startDate: Date;

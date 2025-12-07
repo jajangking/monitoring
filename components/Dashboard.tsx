@@ -709,6 +709,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
+  emptyText: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
   monthlySummaryContainer: {
     marginBottom: 24,
   },

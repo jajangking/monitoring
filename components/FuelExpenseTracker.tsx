@@ -294,7 +294,7 @@ export const FuelExpenseTracker: React.FC = () => {
   };
 
   const filteredExpenses = expenses.filter(expense =>
-    expense.description.toLowerCase().includes(searchText.toLowerCase()) ||
+    (expense.description || '').toLowerCase().includes(searchText.toLowerCase()) ||
     expense.amount.toString().includes(searchText) ||
     expense.liters?.toString().includes(searchText) ||
     new Date(expense.date).toLocaleDateString().includes(searchText)

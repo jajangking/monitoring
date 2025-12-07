@@ -1,5 +1,6 @@
 // enhancedAI.ts - Enhanced AI service with improved capabilities
 import { aiService } from './aiService';
+import { aiDatabaseService } from './aiDatabaseService';
 
 interface AIContext {
   lastUserMessage?: string;
@@ -8,9 +9,33 @@ interface AIContext {
   userData?: Record<string, any>;
 }
 
+// Define a class to manage conversation context for a single session
+class ConversationContext {
+  private history: Array<{role: 'user' | 'assistant', content: string}> = [];
+  private readonly maxLength: number = 10; // Keep last 10 exchanges
+
+  addMessage(role: 'user' | 'assistant', content: string): void {
+    this.history.push({ role, content });
+    // Limit history to avoid memory issues
+    if (this.history.length > this.maxLength) {
+      this.history = this.history.slice(-this.maxLength);
+    }
+  }
+
+  getHistory(): Array<{role: 'user' | 'assistant', content: string}> {
+    return [...this.history]; // Return a copy
+  }
+
+  clear(): void {
+    this.history = [];
+  }
+}
+
 export class EnhancedAIService {
   private static instance: EnhancedAIService;
-  
+  private globalContext: AIContext = {};
+  private conversationContexts: Map<string, ConversationContext> = new Map(); // Key could be user session ID
+
   public static getInstance(): EnhancedAIService {
     if (!EnhancedAIService.instance) {
       EnhancedAIService.instance = new EnhancedAIService();
@@ -19,15 +44,97 @@ export class EnhancedAIService {
   }
 
   /**
+   * Reset the conversation context for a specific session
+   * @param sessionId The session ID to reset
+   */
+  resetConversationContext(sessionId: string): void {
+    const conversationContext = this.conversationContexts.get(sessionId);
+    if (conversationContext) {
+      conversationContext.clear();
+    } else {
+      // If no context exists for the session, create an empty one
+      this.conversationContexts.set(sessionId, new ConversationContext());
+    }
+  }
+
+  /**
+   * Clear all conversation contexts (useful for app reset)
+   */
+  clearAllConversationContexts(): void {
+    this.conversationContexts.clear();
+  }
+
+  /**
    * Enhanced AI response that understands the monitoring app context
    */
-  async getEnhancedAIResponse(userInput: string, context?: AIContext): Promise<string> {
+  async getEnhancedAIResponse(userInput: string, context?: AIContext, sessionId: string = 'default'): Promise<string> {
     try {
-      // Process user input to determine intent
-      const processedInput = this.processUserInput(userInput, context);
-      
-      // Use the AI service directly
-      return await this.callAIServiceEnhanced(userInput, processedInput, context);
+      // Check if user wants to reset the conversation
+      const lowerInput = userInput.toLowerCase();
+      if (lowerInput.includes('reset percakapan') || lowerInput.includes('ulang percakapan') ||
+          lowerInput.includes('baru percakapan') || lowerInput.includes('hapus percakapan') ||
+          lowerInput.includes('reset session') || lowerInput.includes('baru session')) {
+        this.resetConversationContext(sessionId);
+        // Also reset the database service context for this session
+        this.resetAIDatabaseContext(sessionId);
+        return '✅ Percakapan telah direset. Mari kita mulai dari awal. Bagaimana saya bisa membantu Anda hari ini?';
+      }
+
+      // Get or create conversation context for this session
+      let conversationContext = this.conversationContexts.get(sessionId);
+      if (!conversationContext) {
+        conversationContext = new ConversationContext();
+        this.conversationContexts.set(sessionId, conversationContext);
+      }
+
+      // Add user message to conversation history
+      conversationContext.addMessage('user', userInput);
+
+      // First, check if the user wants to add data (order, fuel expense, or oil change)
+      const databaseResult = await aiDatabaseService.processIntent(userInput, sessionId);
+
+      if (databaseResult.success) {
+        // If the intent was successfully processed as a data addition, return the success message
+        // Add the response to conversation history
+        conversationContext.addMessage('assistant', databaseResult.message);
+        return databaseResult.message;
+      } else if (databaseResult.message.includes('Permintaan Anda adalah permintaan informasi')) {
+        // If it's an information query, proceed with normal AI processing
+        // Process user input to determine intent
+        const processedInput = this.processUserInput(userInput, context);
+
+        // Use the AI service with conversation history
+        const response = await this.callAIServiceEnhanced(userInput, processedInput, {
+          ...context,
+          conversationHistory: conversationContext.getHistory().map(msg => ({ role: msg.role, content: msg.content }))
+        });
+
+        // Add the response to conversation history
+        conversationContext.addMessage('assistant', response);
+        return response;
+      } else {
+        // If database processing failed but it was an intent to add data, return the error
+        // Otherwise, proceed with normal AI processing
+        const parsed = await aiDatabaseService.parseUserInput(userInput);
+        if (parsed.intent !== 'query' && parsed.intent !== 'unknown') {
+          // Add the response to conversation history
+          conversationContext.addMessage('assistant', databaseResult.message);
+          return databaseResult.message;
+        } else {
+          // Process user input to determine intent
+          const processedInput = this.processUserInput(userInput, context);
+
+          // Use the AI service with conversation history
+          const response = await this.callAIServiceEnhanced(userInput, processedInput, {
+            ...context,
+            conversationHistory: conversationContext.getHistory().map(msg => ({ role: msg.role, content: msg.content }))
+          });
+
+          // Add the response to conversation history
+          conversationContext.addMessage('assistant', response);
+          return response;
+        }
+      }
     } catch (error) {
       console.error('Error in enhanced AI service:', error);
       return 'Maaf, saya sedang mengalami kendala teknis. Bisakah Anda coba ulang permintaan Anda?';
@@ -35,11 +142,19 @@ export class EnhancedAIService {
   }
 
   /**
+   * Reset the AI database context for a specific session
+   * @param sessionId The session ID to reset
+   */
+  private resetAIDatabaseContext(sessionId: string): void {
+    aiDatabaseService.resetSession(sessionId);
+  }
+
+  /**
    * Process user input to understand intent
    */
   private processUserInput(userInput: string, context?: AIContext): { intent: string, entities: string[] } {
     const lowerInput = userInput.toLowerCase();
-    
+
     // Define intents and keywords
     const intents = {
       greeting: ['halo', 'hai', 'hi', 'hello', 'selamat', 'pagi', 'siang', 'malam'],
@@ -52,10 +167,10 @@ export class EnhancedAIService {
       reset: ['reset', 'hapus', 'bersihkan', 'kosongkan', 'ulang'],
       settings: ['pengaturan', 'setting', 'ubah', 'konfigurasi', 'atur']
     };
-    
+
     const detectedEntities: string[] = [];
     let matchedIntent = 'general';
-    
+
     // Check for intent matches
     for (const [intent, keywords] of Object.entries(intents)) {
       for (const keyword of keywords) {
@@ -66,7 +181,7 @@ export class EnhancedAIService {
         }
       }
     }
-    
+
     return { intent: matchedIntent, entities: detectedEntities };
   }
 
@@ -76,16 +191,18 @@ export class EnhancedAIService {
   private async callAIServiceEnhanced(userInput: string, processedInput: { intent: string, entities: string[] }, context?: AIContext): Promise<string> {
     // Create a more contextual prompt for the AI
     const enhancedPrompt = this.createEnhancedPrompt(userInput, processedInput, context);
-    
-    return aiService.getAIResponse(enhancedPrompt, context?.conversationHistory);
+
+    // Extract content from conversation history for the AI service
+    const conversationHistoryText = context?.conversationHistory?.map(msg => msg.content) || [];
+    return aiService.getAIResponse(enhancedPrompt, conversationHistoryText);
   }
 
   /**
    * Create enhanced prompt with context
    */
   private createEnhancedPrompt(userInput: string, processedInput: { intent: string, entities: string[] }, context?: AIContext): string {
-    const basePrompt = `Anda adalah asisten virtual untuk aplikasi monitoring keuangan harian. Aplikasi ini membantu pengguna mencatat pesanan, pengeluaran bahan bakar (BBM), dan penggantian oli. 
-    
+    const basePrompt = `Anda adalah asisten virtual untuk aplikasi monitoring keuangan harian. Aplikasi ini membantu pengguna mencatat pesanan, pengeluaran bahan bakar (BBM), dan penggantian oli. Berikan jawaban yang membantu dan relevan dalam konteks pengelolaan keuangan harian. Gunakan bahasa Indonesia yang sopan dan mudah dimengerti. Jika pengguna menyebut 'itu', 'tersebut', 'tadi', atau konteks sebelumnya, gunakan percakapan sebelumnya untuk memahami maksud mereka.
+
 Berikut adalah pertanyaan pengguna: "${userInput}"
 
 Inten: ${processedInput.intent}
@@ -93,10 +210,18 @@ Entitas: ${processedInput.entities.join(', ')}
 
 Silakan berikan jawaban yang membantu dan relevan dalam konteks aplikasi monitoring keuangan.`;
 
-    if (context?.lastUserMessage) {
-      return basePrompt + `\n\nPesan sebelumnya: "${context.lastUserMessage}"`;
+    // Add conversation history if available
+    if (context?.conversationHistory && context.conversationHistory.length > 0) {
+      const historyText = context.conversationHistory
+        .slice(-4) // Take last 4 exchanges to avoid overwhelming the prompt
+        .map(msg => `${msg.role === 'user' ? 'Pengguna' : 'Asisten'}: ${msg.content}`)
+        .join('\n');
+
+      if (historyText) {
+        return basePrompt + `\n\nRiwayat percakapan:\n${historyText}`;
+      }
     }
-    
+
     return basePrompt;
   }
 
@@ -106,35 +231,35 @@ Silakan berikan jawaban yang membantu dan relevan dalam konteks aplikasi monitor
   private getEnhancedFallbackResponse(userInput: string, context?: AIContext): string {
     const input = userInput.toLowerCase();
     const processedInput = this.processUserInput(userInput, context);
-    
+
     switch (processedInput.intent) {
       case 'greeting':
         return this.handleGreeting(input);
-        
+
       case 'order':
         return this.handleOrderQuestion(input);
-        
+
       case 'fuel':
         return this.handleFuelQuestion(input);
-        
+
       case 'oil':
         return this.handleOilQuestion(input);
-        
+
       case 'dashboard':
         return this.handleDashboardQuestion(input);
-        
+
       case 'help':
         return this.handleHelpQuestion(input);
-        
+
       case 'date_time':
         return this.handleDateTimeQuestion();
-        
+
       case 'settings':
         return this.handleSettingsQuestion();
-        
+
       case 'reset':
         return this.handleResetQuestion();
-        
+
       default:
         return this.handleGeneralQuestion(input);
     }

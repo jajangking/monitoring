@@ -12,13 +12,32 @@ interface OrderFormProps {
 
 export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order, isEditing = false }) => {
   const originalOrder = useRef(order); // Store the original order data
-  const [amount, setAmount] = useState<string>(order?.amount.toString() || '');
+  const [pricePerItem, setPricePerItem] = useState<string>((order?.amount && order.quantity) ? (order.amount / order.quantity).toString() : '');
   const [quantity, setQuantity] = useState<string>(order?.quantity?.toString() || '');
-  const [pricePerItem, setPricePerItem] = useState<string>(order?.pricePerItem?.toString() || '');
+  const [amount, setAmount] = useState<string>(order?.amount.toString() || '');
   const [date, setDate] = useState<string>(order?.date || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>(order?.description || '');
-  const [useFixedPrice, setUseFixedPrice] = useState<boolean>(!!order?.quantity); // Use fixed price if quantity exists
   const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+
+  // Function to calculate total amount based on price per item and quantity
+  const calculateTotal = (price: string, qty: string): string => {
+    const priceNum = parseFloat(price);
+    const qtyNum = parseInt(qty);
+    if (!isNaN(priceNum) && !isNaN(qtyNum) && qtyNum > 0) {
+      return (priceNum * qtyNum).toString();
+    }
+    return '';
+  };
+
+  // Update amount when pricePerItem or quantity changes
+  useEffect(() => {
+    if (pricePerItem && quantity) {
+      const calculatedAmount = calculateTotal(pricePerItem, quantity);
+      if (calculatedAmount) {
+        setAmount(calculatedAmount);
+      }
+    }
+  }, [pricePerItem, quantity]);
 
   // Load theme preference
   useEffect(() => {
@@ -57,39 +76,21 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
     return () => subscription.remove();
   }, []);
 
-  // Update amount when quantity or price changes (only when using fixed price)
-  useEffect(() => {
-    if (useFixedPrice && quantity && pricePerItem) {
-      const qty = parseInt(quantity, 10);
-      const price = parseFloat(pricePerItem);
-      if (!isNaN(qty) && !isNaN(price)) {
-        setAmount((qty * price).toString());
-      }
-    } else if (!useFixedPrice) {
-      // When switching to custom price mode, clear quantity and pricePerItem
-      // but preserve the amount value
-      setQuantity('');
-      setPricePerItem('');
-    }
-  }, [quantity, pricePerItem, useFixedPrice]);
-
   // Initialize form state when order changes
   useEffect(() => {
     if (order) {
-      setAmount(order.amount.toString());
       setQuantity(order.quantity?.toString() || '');
-      setPricePerItem(order.pricePerItem?.toString() || '');
+      setPricePerItem((order.quantity && order.amount) ? (order.amount / order.quantity).toString() : '');
+      setAmount(order.amount.toString() || '');
       setDate(order.date || new Date().toISOString().split('T')[0]);
       setDescription(order.description || '');
-      setUseFixedPrice(!!order.quantity);
     } else {
       // Reset to default values when creating new order
-      setAmount('');
       setQuantity('');
       setPricePerItem('');
+      setAmount('');
       setDate(new Date().toISOString().split('T')[0]);
       setDescription('');
-      setUseFixedPrice(false);
     }
   }, [order]);  // This should run when the order prop changes, which happens when editing
 
@@ -99,24 +100,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
       return;
     }
 
-    let finalQuantity: number | undefined = undefined;
-    let finalPricePerItem: number | undefined = undefined;
-    let finalAmount: number = parseFloat(amount);
-
-    if (useFixedPrice) {
-      finalQuantity = quantity && !isNaN(parseInt(quantity, 10)) ? parseInt(quantity, 10) : undefined;
-      finalPricePerItem = pricePerItem && !isNaN(parseFloat(pricePerItem)) ? parseFloat(pricePerItem) : undefined;
-
-      // If both quantity and price per item are provided, use their product as amount
-      if (finalQuantity !== undefined && finalPricePerItem !== undefined) {
-        finalAmount = finalQuantity * finalPricePerItem;
-      }
-    }
-
     const orderData: Omit<Order, 'id'> = {
-      amount: finalAmount,
-      quantity: finalQuantity,
-      pricePerItem: finalPricePerItem,
+      amount: parseFloat(amount),
+      quantity: quantity ? parseInt(quantity) : undefined,
       date,
       description
     };
@@ -124,31 +110,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
     onSubmit(orderData);
   };
 
-  const handleQuantityChange = (text: string) => {
-    setQuantity(text);
-    // Automatically calculate amount when in fixed price mode
-    if (useFixedPrice) {
-      const qty = text ? parseInt(text, 10) : NaN;
-      const price = pricePerItem ? parseFloat(pricePerItem) : NaN;
-      if (!isNaN(qty) && !isNaN(price) && qty >= 0 && price >= 0) {
-        const calculatedAmount = (qty * price).toString();
-        setAmount(calculatedAmount);
-      }
-    }
-  };
-
-  const handlePricePerItemChange = (text: string) => {
-    setPricePerItem(text);
-    // Automatically calculate amount when in fixed price mode
-    if (useFixedPrice) {
-      const qty = quantity ? parseInt(quantity, 10) : NaN;
-      const price = text ? parseFloat(text) : NaN;
-      if (!isNaN(qty) && !isNaN(price) && qty >= 0 && price >= 0) {
-        const calculatedAmount = (qty * price).toString();
-        setAmount(calculatedAmount);
-      }
-    }
-  };
 
   // Get theme-appropriate colors
   const getThemeColors = () => {
@@ -159,83 +120,36 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
 
   return (
     <View style={[styles.formContainer, { backgroundColor: themeColors.cardBackground }]}>
-      <View style={styles.switchContainer}>
-        <Text style={[styles.label, { color: themeColors.text }]}>Tipe Pesanan:</Text>
-        <View style={[styles.switchOptionContainer, { backgroundColor: themeColors.cardHeader }]}>
-          <Pressable
-            style={[styles.switchOption, !useFixedPrice && styles.activeSwitchOption, { backgroundColor: !useFixedPrice ? themeColors.activeTabBackground : themeColors.cardBackground }]}
-            onPress={() => {
-              setUseFixedPrice(false);
-              // When switching to custom, clear the fixed price fields but preserve the current amount
-              setQuantity('');
-              setPricePerItem('');
-            }}
-          >
-            <Text style={[styles.switchText, !useFixedPrice && styles.activeSwitchText, { color: !useFixedPrice ? themeColors.activeTabText : themeColors.text }]}>Harga Kustom</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.switchOption, useFixedPrice && styles.activeSwitchOption, { backgroundColor: useFixedPrice ? themeColors.activeTabBackground : themeColors.cardBackground }]}
-            onPress={() => {
-              setUseFixedPrice(true);
-              // When switching to fixed price mode,
-              // set the current amount as pricePerItem and quantity as 1 if no existing values
-              if (!quantity && !pricePerItem && amount && parseFloat(amount) > 0) {
-                setPricePerItem(amount);
-                setQuantity('1');
-              }
-            }}
-          >
-            <Text style={[styles.switchText, useFixedPrice && styles.activeSwitchText, { color: useFixedPrice ? themeColors.activeTabText : themeColors.text }]}>Harga Tetap + Jumlah</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Text style={[styles.label, { color: themeColors.text }]}>Harga per Item (Rp)</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
+        value={pricePerItem}
+        onChangeText={setPricePerItem}
+        placeholder="Masukkan harga per item"
+        keyboardType="numeric"
+        placeholderTextColor={themeColors.placeholderText}
+      />
 
-      {useFixedPrice ? (
-        <>
-          <Text style={[styles.label, { color: themeColors.text }]}>Harga Per Item (Rp)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
-            value={pricePerItem}
-            onChangeText={handlePricePerItemChange}
-            placeholder="Masukkan harga per item"
-            keyboardType="numeric"
-            placeholderTextColor={themeColors.placeholderText}
-          />
+      <Text style={[styles.label, { color: themeColors.text }]}>Jumlah Item</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
+        value={quantity}
+        onChangeText={setQuantity}
+        placeholder="Masukkan jumlah"
+        keyboardType="numeric"
+        placeholderTextColor={themeColors.placeholderText}
+      />
 
-          <Text style={[styles.label, { color: themeColors.text }]}>Jumlah</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
-            value={quantity}
-            onChangeText={handleQuantityChange}
-            placeholder="Masukkan jumlah"
-            keyboardType="numeric"
-            placeholderTextColor={themeColors.placeholderText}
-          />
-
-          <Text style={[styles.label, { color: themeColors.text }]}>Total (Rp) - Dihitung</Text>
-          <TextInput
-            style={[styles.input, styles.calculatedAmountInput, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="Total"
-            keyboardType="numeric"
-            editable={false}
-            placeholderTextColor={themeColors.placeholderText}
-          />
-        </>
-      ) : (
-        <>
-          <Text style={[styles.label, { color: themeColors.text }]}>Total (Rp)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="Masukkan total"
-            keyboardType="numeric"
-            placeholderTextColor={themeColors.placeholderText}
-          />
-        </>
-      )}
+      <Text style={[styles.label, { color: themeColors.text }]}>Total (Rp) - Dihitung Otomatis</Text>
+      <TextInput
+        style={[styles.input, styles.calculatedAmountInput, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.borderColor, color: themeColors.text }]}
+        value={amount}
+        onChangeText={setAmount}
+        placeholder="Total"
+        keyboardType="numeric"
+        editable={false}
+        placeholderTextColor={themeColors.placeholderText}
+      />
 
       <Text style={[styles.label, { color: themeColors.text }]}>Tanggal</Text>
       <TextInput
@@ -332,11 +246,6 @@ const OrderItem: React.FC<OrderItemProps> = ({ order, onEdit, onDelete }) => {
         <Text style={[styles.itemDate, { color: themeColors.text }]}>{new Date(order.date).toLocaleDateString()}</Text>
         <Text style={[styles.itemAmount, { color: themeColors.positive }]}>Rp {order.amount.toLocaleString()}</Text>
       </View>
-      {order.quantity && order.pricePerItem ? (
-        <View style={styles.itemDetails}>
-          <Text style={[styles.itemDetail, { color: themeColors.textSecondary }]}>Qty: {order.quantity} × Rp {order.pricePerItem.toLocaleString()}</Text>
-        </View>
-      ) : null}
       {order.description ? <Text style={[styles.itemDescription, { color: themeColors.textSecondary }]}>{order.description}</Text> : null}
       <View style={styles.itemActions}>
         <Pressable onPress={() => onEdit(order)} style={({ pressed }) => [styles.actionButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}>
@@ -438,7 +347,7 @@ export const OrderTracker: React.FC = () => {
   };
 
   const filteredOrders = orders.filter(order =>
-    order.description.toLowerCase().includes(searchText.toLowerCase()) ||
+    (order.description || '').toLowerCase().includes(searchText.toLowerCase()) ||
     order.amount.toString().includes(searchText) ||
     new Date(order.date).toLocaleDateString().includes(searchText)
   );

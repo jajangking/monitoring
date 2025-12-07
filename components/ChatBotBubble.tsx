@@ -12,7 +12,7 @@ import {
   Keyboard,
   Dimensions
 } from 'react-native';
-import { sendToAI } from '../utils/aiSetup';
+import { sendToAI, setAISession, resetAISession } from '../utils/aiSetup';
 
 interface Message {
   id: string;
@@ -26,6 +26,13 @@ const ChatBotBubble: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', text: 'Halo! Saya adalah asisten virtual. Bagaimana saya bisa membantu Anda hari ini?', sender: 'bot', timestamp: new Date() }
   ]);
+
+  // Initialize a unique session when component mounts
+  useEffect(() => {
+    // Create a unique session ID for this chat instance
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setAISession(sessionId);
+  }, []);
   const [inputText, setInputText] = useState('');
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -50,6 +57,32 @@ const ChatBotBubble: React.FC = () => {
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
+  };
+
+  // Function to reset conversation context
+  const onResetChat = () => {
+    // Add a system message to indicate the reset
+    const resetMessage: Message = {
+      id: Date.now().toString(),
+      text: 'Percakapan telah direset. Mari kita mulai dari awal.',
+      sender: 'bot',
+      timestamp: new Date(),
+    };
+
+    // Reset the AI session
+    resetAISession();
+
+    // Update the messages to show the reset notification
+    setMessages([
+      { id: '1', text: 'Halo! Saya adalah asisten virtual. Bagaimana saya bisa membantu Anda hari ini?', sender: 'bot', timestamp: new Date() },
+      resetMessage
+    ]);
+  };
+
+  // Function to clear conversation context when chat closes
+  const onCloseChat = () => {
+    // In the future, we could add functionality to clear the session context if needed
+    setIsOpen(false);
   };
 
   const handleSend = async () => {
@@ -130,9 +163,14 @@ const ChatBotBubble: React.FC = () => {
         ]}>
           <View style={baseStyles.chatHeader}>
             <Text style={baseStyles.chatHeaderTitle}>Asisten Virtual</Text>
-            <TouchableOpacity onPress={toggleChat} style={baseStyles.closeButton}>
-              <Text style={baseStyles.closeButtonText}>×</Text>
-            </TouchableOpacity>
+            <View style={baseStyles.headerButtons}>
+              <TouchableOpacity onPress={onResetChat} style={[baseStyles.closeButton, baseStyles.resetButton]}>
+                <Text style={baseStyles.closeButtonText}>↺</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onCloseChat} style={baseStyles.closeButton}>
+                <Text style={baseStyles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
@@ -252,6 +290,12 @@ const baseStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  headerButtons: {
+    flexDirection: 'row',
+  },
+  resetButton: {
+    marginRight: 5,
+  },
   messagesContainer: {
     flex: 1,
     padding: 10,
@@ -332,7 +376,7 @@ const getDynamicStyles = (keyboardVisible: boolean, keyboardHeight: number) => {
   const bottomPosition = keyboardVisible ? (keyboardHeight + 20) : 60; // Reduced margin when keyboard is open
   return {
     container: {
-      position: 'absolute',
+      position: 'absolute' as 'absolute',
       bottom: bottomPosition,
       right: 20,
       zIndex: 999999, // Z-index yang sangat tinggi untuk memastikan di atas semua elemen

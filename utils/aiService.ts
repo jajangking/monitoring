@@ -45,7 +45,7 @@ export class AIService {
   async getAIResponse(userInput: string, context?: string[]): Promise<string> {
     if (this.isInitialized && this.apiKey) {
       try {
-        const systemPrompt = "Anda adalah asisten virtual untuk aplikasi monitoring keuangan harian. Aplikasi ini membantu pengguna mencatat pesanan, pengeluaran bahan bakar (BBM), dan penggantian oli. Berikan jawaban yang membantu dan relevan dalam konteks pengelolaan keuangan harian. Gunakan bahasa Indonesia yang sopan dan mudah dimengerti.";
+        const systemPrompt = "Anda adalah asisten virtual untuk aplikasi monitoring keuangan harian. Aplikasi ini membantu pengguna mencatat pesanan, pengeluaran bahan bakar (BBM), dan penggantian oli. Berikan jawaban yang membantu dan relevan dalam konteks pengelolaan keuangan harian. Gunakan bahasa Indonesia yang sopan dan mudah dimengerti. Jika pengguna menyebut 'itu', 'tersebut', 'tadi', atau konteks sebelumnya, gunakan percakapan sebelumnya untuk memahami maksud mereka.";
 
         const messages = [
           { role: "system", content: systemPrompt },
@@ -54,10 +54,10 @@ export class AIService {
 
         // Add context if available
         if (context) {
-          context.forEach((msg, index) => {
-            const role = index % 2 === 0 ? "user" : "assistant";
-            messages.push({ role, content: msg });
-          });
+          for (let i = 0; i < context.length; i++) {
+            const role = i % 2 === 0 ? "user" : "assistant";
+            messages.push({ role, content: context[i] });
+          }
         }
 
         // Log the request for debugging
@@ -88,10 +88,10 @@ export class AIService {
         }
 
         return data.choices[0].message.content || this.getFallbackResponse(userInput);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error calling Groq API directly:', error);
         // Provide more specific error handling for common 400 errors
-        if (error.message.includes('400')) {
+        if (error instanceof Error && error.message.includes('400')) {
           console.warn('400 error suggests issue with API key or request format - using fallback response');
           return this.getFallbackResponse(userInput);
         }

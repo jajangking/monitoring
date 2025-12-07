@@ -1,4 +1,4 @@
-import { supabase } from './utils/supabaseClient';
+import { supabase } from '../utils/supabaseClient';
 
 /**
  * This script creates the required tables in your Supabase database
@@ -6,6 +6,11 @@ import { supabase } from './utils/supabaseClient';
  */
 export const createDatabaseSchema = async () => {
   console.log('Starting database schema creation...');
+
+  if (!supabase) {
+    console.error('Supabase client not initialized - could not create database schema');
+    return;
+  }
 
   try {
     // Create orders table
@@ -39,11 +44,16 @@ export const initializeDatabase = async () => {
   console.log('Initializing database with sample data...');
 
   // Check if tables have data
+  if (!supabase) {
+    console.error('Supabase client not initialized - could not initialize database');
+    return;
+  }
+
   try {
     const { count: ordersCount, error: ordersError } = await supabase
       .from('orders')
-      .select('*', { count: true, head: true });
-      
+      .select('*', { count: 'exact', head: true });
+
     if (ordersError) {
       console.error('Error checking orders table:', ordersError.message);
     } else if (ordersCount === 0) {
@@ -60,7 +70,7 @@ export const initializeDatabase = async () => {
             price_per_item: 150000
           }
         ]);
-      
+
       if (error) {
         console.error('Error inserting sample order:', error.message);
       } else {
@@ -74,8 +84,8 @@ export const initializeDatabase = async () => {
   try {
     const { count: expensesCount, error: expensesError } = await supabase
       .from('fuel_expenses')
-      .select('*', { count: true, head: true });
-      
+      .select('*', { count: 'exact', head: true });
+
     if (expensesError) {
       console.error('Error checking fuel_expenses table:', expensesError.message);
     } else if (expensesCount === 0) {
@@ -91,7 +101,7 @@ export const initializeDatabase = async () => {
             description: 'Sample fuel expense for testing'
           }
         ]);
-      
+
       if (error) {
         console.error('Error inserting sample fuel expense:', error.message);
       } else {
@@ -105,8 +115,8 @@ export const initializeDatabase = async () => {
   try {
     const { count: changesCount, error: changesError } = await supabase
       .from('oil_changes')
-      .select('*', { count: true, head: true });
-      
+      .select('*', { count: 'exact', head: true });
+
     if (changesError) {
       console.error('Error checking oil_changes table:', changesError.message);
     } else if (changesCount === 0) {
@@ -122,7 +132,7 @@ export const initializeDatabase = async () => {
             description: 'Sample oil change for testing'
           }
         ]);
-      
+
       if (error) {
         console.error('Error inserting sample oil change:', error.message);
       } else {
