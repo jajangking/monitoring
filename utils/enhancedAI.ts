@@ -91,15 +91,23 @@ export class EnhancedAIService {
       conversationContext.addMessage('user', userInput);
 
       // First, check if the user wants to add data (order, fuel expense, or oil change)
+      // or if they're asking for information about existing data
       const databaseResult = await aiDatabaseService.processIntent(userInput, sessionId);
 
       if (databaseResult.success) {
-        // If the intent was successfully processed as a data addition, return the success message
+        // If the intent was successfully processed (either data addition or query), return the success message
         // Add the response to conversation history
         conversationContext.addMessage('assistant', databaseResult.message);
         return databaseResult.message;
-      } else if (databaseResult.message.includes('Permintaan Anda adalah permintaan informasi')) {
-        // If it's an information query, proceed with normal AI processing
+      } else if (databaseResult.message.includes('Permintaan informasi')) {
+        // If it's an information query, first try to check for data reading queries
+        const dataReadingResult = await this.checkForDataReadingQuery(userInput);
+        if (dataReadingResult) {
+          conversationContext.addMessage('assistant', dataReadingResult);
+          return dataReadingResult;
+        }
+
+        // If not a data reading query, proceed with normal AI processing
         // Process user input to determine intent
         const processedInput = this.processUserInput(userInput, context);
 
@@ -113,14 +121,23 @@ export class EnhancedAIService {
         conversationContext.addMessage('assistant', response);
         return response;
       } else {
-        // If database processing failed but it was an intent to add data, return the error
+        // If database processing failed for data entry but it was an intent to add data, return the error
         // Otherwise, proceed with normal AI processing
         const parsed = await aiDatabaseService.parseUserInput(userInput);
+
+        // Check if the input contains keywords for data entry but failed for other reasons
         if (parsed.intent !== 'query' && parsed.intent !== 'unknown') {
           // Add the response to conversation history
           conversationContext.addMessage('assistant', databaseResult.message);
           return databaseResult.message;
         } else {
+          // First try to check for data reading queries before falling back to AI
+          const dataReadingResult = await this.checkForDataReadingQuery(userInput);
+          if (dataReadingResult) {
+            conversationContext.addMessage('assistant', dataReadingResult);
+            return dataReadingResult;
+          }
+
           // Process user input to determine intent
           const processedInput = this.processUserInput(userInput, context);
 
@@ -146,6 +163,7 @@ export class EnhancedAIService {
    * @param sessionId The session ID to reset
    */
   private resetAIDatabaseContext(sessionId: string): void {
+    console.log(`Resetting AI database context for session ${sessionId}`);
     aiDatabaseService.resetSession(sessionId);
   }
 
@@ -195,6 +213,36 @@ export class EnhancedAIService {
     // Extract content from conversation history for the AI service
     const conversationHistoryText = context?.conversationHistory?.map(msg => msg.content) || [];
     return aiService.getAIResponse(enhancedPrompt, conversationHistoryText);
+  }
+
+  /**
+   * Check if the user input is asking for data that we can read from the database
+   */
+  private async checkForDataReadingQuery(userInput: string): Promise<string | null> {
+    // Check if the database service can handle this query
+    const lowerInput = userInput.toLowerCase();
+
+    // Check if this is a query about data (not data entry)
+    const queryKeywords = [
+      'berapa', 'berapa kali', 'berapa km', 'berapa liter', 'berapa harga', 'berapa biaya',
+      'berapa jumlah', 'berapa total', 'berapa rata', 'berapa banyak', 'berapa kali',
+      'kapan', 'tanggal', 'waktu', 'lama', 'terakhir', 'sejak kapan',
+      'cek', 'lihat', 'tampilkan', 'show', 'info', 'informasi',
+      'ringkasan', 'report', 'laporan', 'statistik', 'data',
+      'berapa sering', 'berapa sering ganti', 'berapa jarak', 'berapa jarak ganti'
+    ];
+
+    const isDataQuery = queryKeywords.some(keyword => lowerInput.includes(keyword));
+
+    if (isDataQuery) {
+      // Try to handle it with the database service
+      const result = await aiDatabaseService.handleUniversalQuery(userInput);
+      if (result) {
+        return result;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -276,31 +324,44 @@ Silakan berikan jawaban yang membantu dan relevan dalam konteks aplikasi monitor
 
   private handleOrderQuestion(input: string): string {
     if (input.includes('baru') || input.includes('tambah')) {
-      return 'Untuk menambah pesanan baru, buka tab "Pesanan" lalu ketuk tombol +. Isi detail pesanan seperti nama pelanggan, tanggal, dan jumlah pembayaran. Data akan otomatis disimpan.';
+      return 'Anda dapat menambah pesanan baru dengan dua cara:\n1. Buka tab "Pesanan" dan ketuk tombol +, atau\n2. Beri perintah ke saya seperti: "Saya mendapat pesanan seharga 150.000" atau "Tambahkan order dari Pak Budi 85.000". Saya akan meminta konfirmasi sebelum menyimpan.';
     } else if (input.includes('lihat') || input.includes('cek') || input.includes('berapa')) {
       return 'Untuk melihat daftar pesanan, buka tab "Pesanan". Anda bisa melihat semua pesanan beserta tanggal dan jumlah pembayaran.';
     } else {
-      return 'Fitur pesanan memungkinkan Anda mencatat transaksi harian. Buka tab "Pesanan" untuk menambah, mengedit, atau melihat pesanan Anda. Setiap pesanan akan dihitung dalam ringkasan keuangan.';
+      return 'Fitur pesanan memungkinkan Anda mencatat transaksi harian. Gunakan perintah seperti "Saya mendapat pesanan 200.000" atau buka tab "Pesanan" secara langsung. Setiap pesanan akan dihitung dalam ringkasan keuangan.';
     }
   }
 
   private handleFuelQuestion(input: string): string {
     if (input.includes('baru') || input.includes('tambah') || input.includes('isi')) {
-      return 'Untuk mencatat pengeluaran BBM baru, buka tab "BBM" lalu ketuk tombol +. Isi jumlah liter dan biaya pengisian. Aplikasi akan menghitung rata-rata konsumsi BBM Anda.';
+      return 'Anda dapat menambahkan pengeluaran BBM baru dengan dua cara:\n1. Buka tab "BBM" dan ketuk tombol +, atau\n2. Cukup beri perintah ke saya seperti: "Saya mengisi bensin 3 liter seharga 30.000" atau "Catat pengeluaran BBM 50.000 untuk 4 liter". Saya akan meminta konfirmasi sebelum menyimpan.';
     } else if (input.includes('lihat') || input.includes('cek') || input.includes('berapa')) {
       return 'Untuk melihat riwayat pengeluaran BBM, buka tab "BBM". Anda bisa melihat tanggal, jumlah liter, dan biaya pengisian BBM.';
     } else {
-      return 'Fitur BBM membantu Anda mencatat pengeluaran bahan bakar. Buka tab "BBM" untuk menambahkan pengeluaran BBM baru. Aplikasi juga akan menampilkan statistik konsumsi BBM Anda.';
+      return 'Fitur BBM membantu Anda mencatat pengeluaran bahan bakar. Gunakan perintah seperti "Saya mengeluarkan uang 75.000 untuk bensin 6 liter" atau buka tab "BBM" secara langsung. Aplikasi juga akan menampilkan statistik konsumsi BBM Anda.';
     }
   }
 
   private handleOilQuestion(input: string): string {
     if (input.includes('baru') || input.includes('ganti') || input.includes('tambah')) {
-      return 'Untuk mencatat penggantian oli baru, buka tab "Oli" lalu ketuk tombol +. Isi biaya penggantian oli dan kilometer saat penggantian. Ini penting untuk perawatan kendaraan.';
+      return 'Anda dapat menambahkan penggantian oli baru dengan dua cara:\n1. Buka tab "Oli" dan ketuk tombol +, atau\n2. Cukup beri perintah ke saya seperti: "Saya ganti oli seharga 100.000 dengan kilometer 15.000" atau "Catat penggantian oli 75.000". Saya akan meminta konfirmasi sebelum menyimpan.';
     } else if (input.includes('lihat') || input.includes('cek') || input.includes('jadwal')) {
       return 'Untuk melihat riwayat penggantian oli, buka tab "Oli". Anda bisa melihat tanggal dan kilometer terakhir saat oli diganti.';
+    } else if (input.includes('berapa') && input.includes('km')) {
+      // Handle the specific question "berapa km sekali untuk ganti oli?"
+      return 'Jarak antar penggantian oli biasanya antara 5.000 - 10.000 km, tergantung jenis oli dan kondisi penggunaan kendaraan. Namun, untuk informasi akurat berdasarkan riwayat Anda, saya bisa cek data sebelumnya. Anda bisa bertanya: "berapa jarak rata-rata ganti oli saya sebelumnya?" atau "kapan terakhir kali ganti oli?"';
+    } else if (input.includes('berikutnya') || input.includes('selanjutnya') || input.includes('selanjutnya')) {
+      if (input.match(/\d{3,5}\s*(km|kilometer)/i)) {
+        // Detect custom km values in the query
+        const kmMatch = input.match(/(\d{3,5})\s*(km|kilometer)/i);
+        if (kmMatch) {
+          const kmValue = kmMatch[1];
+          return `Anda dapat mengatur jadwal ganti oli berikutnya sesuai kebutuhan. Jika Anda ingin interval ${kmValue} km, Anda bisa bertanya: "rekomendasi ganti oli berikutnya di ${kmValue} km" untuk informasi lebih lanjut berdasarkan data Anda.`;
+        }
+      }
+      return 'Anda bisa menentukan jadwal ganti oli berikutnya berdasarkan kilometer yang Anda inginkan. Misalnya, Anda bisa bertanya: "berapa km untuk ganti oli berikutnya di 3000km" untuk mendapatkan rekomendasi khusus.';
     } else {
-      return 'Fitur Oli membantu Anda mencatat biaya penggantian oli dan menjaga jadwal perawatan kendaraan. Buka tab "Oli" untuk menambahkan data penggantian oli.';
+      return 'Fitur Oli membantu Anda mencatat biaya penggantian oli dan menjaga jadwal perawatan kendaraan. Gunakan perintah seperti "Ganti oli dengan biaya 80.000" atau buka tab "Oli" secara langsung.';
     }
   }
 
@@ -332,6 +393,20 @@ Silakan berikan jawaban yang membantu dan relevan dalam konteks aplikasi monitor
   }
 
   private handleGeneralQuestion(input: string): string {
+    // Check if the input contains "berapa km" followed by "ganti oli" or "oli" to handle the specific issue
+    if (input.includes('berapa km') && (input.includes('ganti oli') || input.includes('oli'))) {
+      return 'Anda ingin tahu seberapa sering atau pada jarak berapa sebaiknya ganti oli? Berdasarkan standar umum, oli sebaiknya diganti setiap 5.000 - 10.000 km. Namun, jika Anda ingin informasi berdasarkan data Anda sebelumnya, silakan tanyakan: "berapa jarak rata-rata ganti oli saya sebelumnya?" atau saya bisa bantu cek riwayat penggantian oli Anda.';
+    }
+
+    // Check for custom oil change recommendations
+    if (input.match(/(?:ganti|berikutnya|selanjutnya).*?(\d{3,5})\s*(km|kilometer)/i)) {
+      const kmMatch = input.match(/(\d{3,5})\s*(km|kilometer)/i);
+      if (kmMatch) {
+        const kmValue = kmMatch[1];
+        return `Saya bisa memberikan rekomendasi ganti oli berdasarkan interval ${kmValue} km. Anda bisa bertanya secara spesifik: "rekomendasi ganti oli berikutnya di ${kmValue} km" untuk informasi yang lebih detail berdasarkan data riwayat Anda.`;
+      }
+    }
+
     const generalResponses = [
       'Terima kasih atas pertanyaan Anda. Aplikasi monitoring ini membantu Anda mencatat pesanan, pengeluaran BBM, dan penggantian oli. Buka menu sesuai kebutuhan Anda untuk mulai mencatat.',
       'Saya siap membantu! Jika Anda ingin mencatat pesanan baru, buka tab "Pesanan". Untuk mencatat BBM, buka tab "BBM". Untuk mencatat penggantian oli, buka tab "Oli".',

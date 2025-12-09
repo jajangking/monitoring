@@ -14,6 +14,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
   const originalOrder = useRef(order); // Store the original order data
   const [pricePerItem, setPricePerItem] = useState<string>((order?.amount && order.quantity) ? (order.amount / order.quantity).toString() : '');
   const [quantity, setQuantity] = useState<string>(order?.quantity?.toString() || '');
+  const [orderType, setOrderType] = useState<'Regular' | 'Paket'>(order?.orderType || 'Regular');
   const [amount, setAmount] = useState<string>(order?.amount.toString() || '');
   const [date, setDate] = useState<string>(order?.date || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState<string>(order?.description || '');
@@ -38,6 +39,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
       }
     }
   }, [pricePerItem, quantity]);
+
+  // Reset date to today when switching to add mode (not edit mode)
+  useEffect(() => {
+    if (!isEditing && !order) {
+      // Only reset date to today if we're adding a new order (not editing)
+      setDate(new Date().toISOString().split('T')[0]);
+    }
+  }, [isEditing, order]);
 
   // Load theme preference
   useEffect(() => {
@@ -81,6 +90,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
     if (order) {
       setQuantity(order.quantity?.toString() || '');
       setPricePerItem((order.quantity && order.amount) ? (order.amount / order.quantity).toString() : '');
+      setOrderType(order.orderType || 'Regular');
       setAmount(order.amount.toString() || '');
       setDate(order.date || new Date().toISOString().split('T')[0]);
       setDescription(order.description || '');
@@ -88,6 +98,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
       // Reset to default values when creating new order
       setQuantity('');
       setPricePerItem('');
+      setOrderType('Regular');
       setAmount('');
       setDate(new Date().toISOString().split('T')[0]);
       setDescription('');
@@ -103,6 +114,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
     const orderData: Omit<Order, 'id'> = {
       amount: parseFloat(amount),
       quantity: quantity ? parseInt(quantity) : undefined,
+      orderType,
       date,
       description
     };
@@ -159,6 +171,36 @@ export const OrderForm: React.FC<OrderFormProps> = ({ onSubmit, onCancel, order,
         placeholder="YYYY-MM-DD"
         placeholderTextColor={themeColors.placeholderText}
       />
+
+      <Text style={[styles.label, { color: themeColors.text }]}>Tipe Pesanan</Text>
+      <View style={styles.orderTypeContainer}>
+        <Pressable
+          style={[
+            styles.orderTypeButton,
+            orderType === 'Regular' && styles.activeTypeButton,
+            { backgroundColor: orderType === 'Regular' ? themeColors.primaryButton : themeColors.cardBackground }
+          ]}
+          onPress={() => setOrderType('Regular')}
+        >
+          <Text style={[
+            styles.orderTypeText,
+            { color: orderType === 'Regular' ? themeColors.buttonText : themeColors.text }
+          ]}>Regular</Text>
+        </Pressable>
+        <Pressable
+          style={[
+            styles.orderTypeButton,
+            orderType === 'Paket' && styles.activeTypeButton,
+            { backgroundColor: orderType === 'Paket' ? themeColors.primaryButton : themeColors.cardBackground }
+          ]}
+          onPress={() => setOrderType('Paket')}
+        >
+          <Text style={[
+            styles.orderTypeText,
+            { color: orderType === 'Paket' ? themeColors.buttonText : themeColors.text }
+          ]}>Paket</Text>
+        </Pressable>
+      </View>
 
       <Text style={[styles.label, { color: themeColors.text }]}>Deskripsi</Text>
       <TextInput
@@ -246,6 +288,25 @@ const OrderItem: React.FC<OrderItemProps> = ({ order, onEdit, onDelete }) => {
         <Text style={[styles.itemDate, { color: themeColors.text }]}>{new Date(order.date).toLocaleDateString()}</Text>
         <Text style={[styles.itemAmount, { color: themeColors.positive }]}>Rp {order.amount.toLocaleString()}</Text>
       </View>
+      {order.quantity && (
+        <View style={styles.itemDetails}>
+          <Text style={[styles.itemDetail, { color: themeColors.textSecondary }]}>
+            Jumlah: {order.quantity} {order.pricePerItem ? `@ Rp ${order.pricePerItem.toLocaleString()}/item` : ''}
+          </Text>
+          {order.orderType && (
+            <Text style={[
+              styles.itemType,
+              {
+                color: order.orderType === 'Paket' ? themeColors.positive : themeColors.textSecondary,
+                fontWeight: '600',
+                fontSize: 12
+              }
+            ]}>
+              {order.orderType}
+            </Text>
+          )}
+        </View>
+      )}
       {order.description ? <Text style={[styles.itemDescription, { color: themeColors.textSecondary }]}>{order.description}</Text> : null}
       <View style={styles.itemActions}>
         <Pressable onPress={() => onEdit(order)} style={({ pressed }) => [styles.actionButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}>
@@ -259,12 +320,38 @@ const OrderItem: React.FC<OrderItemProps> = ({ order, onEdit, onDelete }) => {
   );
 };
 
+// Helper function to determine which period an order belongs to
+// Returns a string in format YYYY-MM-DD1-DD2 (e.g. "2023-12-1-15" or "2023-12-16-30")
+const getOrderPeriod = (dateString: string) => {
+  const date = new Date(dateString);
+  const day = date.getDate();
+
+  if (day <= 15) {
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-1-15`;
+  } else {
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-16-30`;
+  }
+};
+
+// Helper function to format period for display
+const formatPeriod = (periodString: string) => {
+  const [year, month, startDay, endDay] = periodString.split('-');
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  return `${startDay} - ${endDay} ${monthNames[parseInt(month) - 1]} ${year}`;
+};
+
 export const OrderTracker: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [searchText, setSearchText] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+  // State for period selection
+  const [periodMode, setPeriodMode] = useState<'monthly' | 'semiMonthly'>('monthly');
 
   useEffect(() => {
     loadOrders();
@@ -346,11 +433,49 @@ export const OrderTracker: React.FC = () => {
     );
   };
 
+  // Filter orders based on search text and period
   const filteredOrders = orders.filter(order =>
     (order.description || '').toLowerCase().includes(searchText.toLowerCase()) ||
     order.amount.toString().includes(searchText) ||
     new Date(order.date).toLocaleDateString().includes(searchText)
   );
+
+  // Helper function to group orders by date within each period
+  const groupOrdersByDate = (orders: Order[]) => {
+    return orders.reduce((acc: { [key: string]: Order[] }, order) => {
+      const date = order.date; // Format: YYYY-MM-DD
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(order);
+      return acc;
+    }, {});
+  };
+
+  // Organize orders by period based on the selected mode
+  const ordersByPeriod = periodMode === 'semiMonthly'
+    ? filteredOrders.reduce((acc: { [key: string]: Order[] }, order) => {
+        const period = getOrderPeriod(order.date);
+        if (!acc[period]) {
+          acc[period] = [];
+        }
+        acc[period].push(order);
+        return acc;
+      }, {})
+    : filteredOrders.reduce((acc: { [key: string]: Order[] }, order) => {
+        const period = `${order.date.substring(0, 7)}`; // Year-Month format
+        if (!acc[period]) {
+          acc[period] = [];
+        }
+        acc[period].push(order);
+        return acc;
+      }, {});
+
+  // Group orders by date within each period
+  const ordersByPeriodAndDate: { [key: string]: { [key: string]: Order[] } } = {};
+  Object.entries(ordersByPeriod).forEach(([period, periodOrders]) => {
+    ordersByPeriodAndDate[period] = groupOrdersByDate(periodOrders);
+  });
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -381,6 +506,41 @@ export const OrderTracker: React.FC = () => {
       }
     >
       <Text style={[styles.title, { color: themeColors.text }]}>Pelacak Pesanan</Text>
+
+      {/* Period Toggle Section */}
+      <View style={styles.switchContainer}>
+        <Text style={[styles.label, { color: themeColors.text, textAlign: 'center', marginBottom: 8 }]}>Pilih Mode Periode</Text>
+        <View style={[styles.switchOptionContainer, { backgroundColor: themeColors.cardBackground }]}>
+          <Pressable
+            style={[
+              styles.switchOption,
+              periodMode === 'monthly' && styles.activeSwitchOption,
+              { backgroundColor: periodMode === 'monthly' ? themeColors.primaryButton : 'transparent' }
+            ]}
+            onPress={() => setPeriodMode('monthly')}
+          >
+            <Text style={[
+              styles.switchText,
+              { color: periodMode === 'monthly' ? themeColors.buttonText : themeColors.text },
+              periodMode === 'monthly' && styles.activeSwitchText
+            ]}>Bulanan</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.switchOption,
+              periodMode === 'semiMonthly' && styles.activeSwitchOption,
+              { backgroundColor: periodMode === 'semiMonthly' ? themeColors.primaryButton : 'transparent' }
+            ]}
+            onPress={() => setPeriodMode('semiMonthly')}
+          >
+            <Text style={[
+              styles.switchText,
+              { color: periodMode === 'semiMonthly' ? themeColors.buttonText : themeColors.text },
+              periodMode === 'semiMonthly' && styles.activeSwitchText
+            ]}>Mingguan (1-15 & 16-30)</Text>
+          </Pressable>
+        </View>
+      </View>
 
       <View style={styles.header}>
         <View style={styles.searchContainer}>
@@ -417,23 +577,85 @@ export const OrderTracker: React.FC = () => {
         </View>
       )}
 
-      <FlatList
-        data={filteredOrders}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <OrderItem
-            order={item}
-            onEdit={(order) => {
-              setEditingOrder(order);
-              setShowForm(true);
-            }}
-            onDelete={handleDeleteOrder}
-          />
-        )}
-        ListEmptyComponent={<Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>Tidak ada pesanan ditemukan</Text>}
-        scrollEnabled={false} // Disable FlatList scroll since parent ScrollView handles it
-        contentContainerStyle={styles.flatListContent}
-      />
+      {/* Conditional rendering based on period mode */}
+      {Object.keys(ordersByPeriod).length === 0 ? (
+        <Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>Tidak ada pesanan ditemukan</Text>
+      ) : (
+        Object.entries(ordersByPeriodAndDate).map(([period, ordersByDate]) => {
+          // Calculate overall stats for the period
+          const periodOrders = Object.values(ordersByDate).flat();
+          const totalAmount = periodOrders.reduce((sum, order) => sum + order.amount, 0);
+          const avgAmount = periodOrders.length > 0 ? totalAmount / periodOrders.length : 0;
+          const totalQty = periodOrders.reduce((sum, order) => sum + (order.quantity || 0), 0);
+          const avgQty = periodOrders.length > 0 ? totalQty / periodOrders.length : 0;
+
+          return (
+            <View key={period} style={styles.periodSection}>
+              <View style={[styles.cardHeader, { backgroundColor: themeColors.cardHeader }]}>
+                <View style={styles.headerInfo}>
+                  <Text style={[styles.periodTitle, { color: themeColors.text }]}>
+                    {periodMode === 'semiMonthly' ? formatPeriod(period) :
+                      new Date(period + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                  </Text>
+                  <Text style={[styles.periodStats, { color: themeColors.textSecondary }]}>
+                    {periodOrders.length} pesanan • Rata-rata: Rp {avgAmount.toLocaleString('id-ID')}
+                  </Text>
+                  {totalQty > 0 && (
+                    <Text style={[styles.periodStats, { color: themeColors.textSecondary }]}>
+                      Jumlah barang: {totalQty} • Rata-rata: {avgQty.toFixed(1)}/pesanan
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.periodTotal, { color: themeColors.positive }]}>
+                  Total: Rp {totalAmount.toLocaleString('id-ID')}
+                </Text>
+              </View>
+
+              <View style={styles.ordersContainer}>
+                {/* Group orders by date within the period */}
+                {Object.entries(ordersByDate).map(([date, dateOrders]) => {
+                  // Calculate stats for this date
+                  const dateTotalAmount = dateOrders.reduce((sum, order) => sum + order.amount, 0);
+                  const dateTotalQty = dateOrders.reduce((sum, order) => sum + (order.quantity || 0), 0);
+
+                  return (
+                    <View key={date} style={styles.dateGroup}>
+                      <View style={[styles.dateHeader, { backgroundColor: themeColors.cardHeader }]}>
+                        <Text style={[styles.dateTitle, { color: themeColors.text }]}>
+                          {new Date(date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                        <View style={styles.dateStats}>
+                          <Text style={[styles.dateAmount, { color: themeColors.positive }]}>
+                            Rp {dateTotalAmount.toLocaleString('id-ID')}
+                          </Text>
+                          {dateTotalQty > 0 && (
+                            <Text style={[styles.dateQty, { color: themeColors.textSecondary }]}>
+                              ({dateTotalQty} barang)
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.dateOrdersContainer}>
+                        {dateOrders.map((order) => (
+                          <OrderItem
+                            key={order.id}
+                            order={order}
+                            onEdit={(order) => {
+                              setEditingOrder(order);
+                              setShowForm(true);
+                            }}
+                            onDelete={handleDeleteOrder}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })
+      )}
     </ScrollView>
   );
 };
@@ -668,5 +890,102 @@ const styles = StyleSheet.create({
   },
   pressedButton: {
     opacity: 0.7,
+  },
+  periodSection: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardHeader: {
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  periodTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  periodTotal: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  periodStats: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  ordersContainer: {
+    padding: 8,
+  },
+  dateGroup: {
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  dateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  dateTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dateStats: {
+    alignItems: 'flex-end',
+  },
+  dateAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dateQty: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dateOrdersContainer: {
+    padding: 4,
+  },
+  orderTypeContainer: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16,
+    backgroundColor: '#f0f0f0',
+  },
+  orderTypeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 6,
+    marginHorizontal: 2,
+  },
+  activeTypeButton: {
+    backgroundColor: '#2196F3',
+  },
+  orderTypeText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  itemType: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#f0f0f0',
   },
 });

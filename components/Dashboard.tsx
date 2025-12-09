@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Pressable, RefreshControl, Appearance } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { OrderTracker } from '../components/OrderTracker';
 import { FuelExpenseTracker } from '../components/FuelExpenseTracker';
 import { OilChangeTracker } from '../components/OilChangeTracker';
+import { SparepartTracker } from '../components/SparepartTracker';
 import { DataModel } from '../models/DataModel';
 import { calculateNetIncome, calculateMonthlyTotals, calculateCustomRangeTotals, getPredefinedDateRanges, calculateMonthlyDailyAccumulation, calculateDailyOrderCount, calculateTotalOrders, calculateTotalExpenses } from '../utils/Calculations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ExportImportUtils } from '../utils/ExportImportUtils';
 
 // Define the main tabs
-type Tab = 'dashboard' | 'orders' | 'fuel' | 'oil' | 'settings';
+type Tab = 'dashboard' | 'orders' | 'fuel' | 'oil' | 'spareparts' | 'settings';
 
 // Define summary data structure
 interface SummaryData {
@@ -17,6 +20,16 @@ interface SummaryData {
   netIncome: number;
   firstHalfNetIncome: number;
   secondHalfNetIncome: number;
+  firstHalfOrdersTotal?: number;
+  secondHalfOrdersTotal?: number;
+  firstHalfOrdersCount?: number;
+  secondHalfOrdersCount?: number;
+  firstHalfOrdersAvg?: number;
+  secondHalfOrdersAvg?: number;
+  firstHalfQtyTotal?: number;
+  secondHalfQtyTotal?: number;
+  firstHalfQtyAvg?: number;
+  secondHalfQtyAvg?: number;
   currentMonthOrders: number;
   currentMonthExpenses: number;
   currentMonthNetIncome: number;
@@ -40,6 +53,8 @@ const Dashboard: React.FC = () => {
   });
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  // State untuk pilihan periode
+  const [periodType, setPeriodType] = useState<'monthly' | 'semiMonthly'>('monthly');
 
   // Add state for dark mode
   const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
@@ -58,7 +73,7 @@ const Dashboard: React.FC = () => {
     });
 
     return () => subscription.remove();
-  }, [currentMonth, currentYear, userTheme]);
+  }, [currentMonth, currentYear, userTheme, periodType]);
 
   const loadThemePreference = async () => {
     try {
@@ -91,6 +106,109 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // Helper function to calculate data for period type (monthly or semi-monthly)
+  const calculateDataForPeriodType = (orders, fuelExpenses, oilChanges, year, month, periodType) => {
+    if (periodType === 'monthly') {
+      // Calculate monthly totals for current month
+      return calculateMonthlyTotals(
+        orders,
+        fuelExpenses,
+        oilChanges,
+        year,
+        month
+      );
+    } else {
+      // Calculate semi-monthly totals (1-15 and 16-end of month)
+      const firstHalfStartDate = new Date(year, month, 1);
+      const firstHalfEndDate = new Date(year, month, 15);
+      const secondHalfStartDate = new Date(year, month, 16);
+      const secondHalfEndDate = new Date(year, month + 1, 0); // Last day of the month
+
+      const firstHalfOrders = orders.filter(order =>
+        new Date(order.date) >= firstHalfStartDate && new Date(order.date) <= firstHalfEndDate
+      );
+      const secondHalfOrders = orders.filter(order =>
+        new Date(order.date) >= secondHalfStartDate && new Date(order.date) <= secondHalfEndDate
+      );
+
+      const firstHalfFuelExpenses = fuelExpenses.filter(expense =>
+        new Date(expense.date) >= firstHalfStartDate && new Date(expense.date) <= firstHalfEndDate
+      );
+      const secondHalfFuelExpenses = fuelExpenses.filter(expense =>
+        new Date(expense.date) >= secondHalfStartDate && new Date(expense.date) <= secondHalfEndDate
+      );
+
+      const firstHalfOilChanges = oilChanges.filter(change =>
+        new Date(change.date) >= firstHalfStartDate && new Date(change.date) <= firstHalfEndDate
+      );
+      const secondHalfOilChanges = oilChanges.filter(change =>
+        new Date(change.date) >= secondHalfStartDate && new Date(change.date) <= secondHalfEndDate
+      );
+
+      // Calculate orders stats
+      const firstHalfOrdersTotal = firstHalfOrders.reduce((sum, order) => sum + order.amount, 0);
+      const firstHalfOrdersCount = firstHalfOrders.length;
+      const firstHalfOrdersAvg = firstHalfOrdersCount > 0 ? firstHalfOrdersTotal / firstHalfOrdersCount : 0;
+      const firstHalfQtyTotal = firstHalfOrders.reduce((sum, order) => sum + (order.quantity || 0), 0);
+      const firstHalfQtyAvg = firstHalfOrdersCount > 0 ? firstHalfQtyTotal / firstHalfOrdersCount : 0;
+
+      const secondHalfOrdersTotal = secondHalfOrders.reduce((sum, order) => sum + order.amount, 0);
+      const secondHalfOrdersCount = secondHalfOrders.length;
+      const secondHalfOrdersAvg = secondHalfOrdersCount > 0 ? secondHalfOrdersTotal / secondHalfOrdersCount : 0;
+      const secondHalfQtyTotal = secondHalfOrders.reduce((sum, order) => sum + (order.quantity || 0), 0);
+      const secondHalfQtyAvg = secondHalfOrdersCount > 0 ? secondHalfQtyTotal / secondHalfOrdersCount : 0;
+
+      // Calculate expenses stats
+      const firstHalfFuelExpensesTotal = firstHalfFuelExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const firstHalfFuelExpensesCount = firstHalfFuelExpenses.length;
+      const firstHalfOilExpensesTotal = firstHalfOilChanges.reduce((sum, change) => sum + change.amount, 0);
+      const firstHalfOilExpensesCount = firstHalfOilChanges.length;
+      const firstHalfExpensesTotal = firstHalfFuelExpensesTotal + firstHalfOilExpensesTotal;
+      const firstHalfNetIncome = firstHalfOrdersTotal - firstHalfExpensesTotal;
+
+      const secondHalfFuelExpensesTotal = secondHalfFuelExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const secondHalfFuelExpensesCount = secondHalfFuelExpenses.length;
+      const secondHalfOilExpensesTotal = secondHalfOilChanges.reduce((sum, change) => sum + change.amount, 0);
+      const secondHalfOilExpensesCount = secondHalfOilChanges.length;
+      const secondHalfExpensesTotal = secondHalfFuelExpensesTotal + secondHalfOilExpensesTotal;
+      const secondHalfNetIncome = secondHalfOrdersTotal - secondHalfExpensesTotal;
+
+      return {
+        monthly: {
+          ordersTotal: firstHalfOrdersTotal + secondHalfOrdersTotal,
+          expensesTotal: firstHalfExpensesTotal + secondHalfExpensesTotal,
+          netIncome: firstHalfNetIncome + secondHalfNetIncome
+        },
+        firstHalf: {
+          ordersTotal: firstHalfOrdersTotal,
+          ordersCount: firstHalfOrdersCount,
+          ordersAvg: firstHalfOrdersAvg,
+          qtyTotal: firstHalfQtyTotal,
+          qtyAvg: firstHalfQtyAvg,
+          expensesTotal: firstHalfExpensesTotal,
+          fuelExpensesTotal: firstHalfFuelExpensesTotal,
+          oilExpensesTotal: firstHalfOilExpensesTotal,
+          fuelExpensesCount: firstHalfFuelExpensesCount,
+          oilExpensesCount: firstHalfOilExpensesCount,
+          netIncome: firstHalfNetIncome
+        },
+        secondHalf: {
+          ordersTotal: secondHalfOrdersTotal,
+          ordersCount: secondHalfOrdersCount,
+          ordersAvg: secondHalfOrdersAvg,
+          qtyTotal: secondHalfQtyTotal,
+          qtyAvg: secondHalfQtyAvg,
+          expensesTotal: secondHalfExpensesTotal,
+          fuelExpensesTotal: secondHalfFuelExpensesTotal,
+          oilExpensesTotal: secondHalfOilExpensesTotal,
+          fuelExpensesCount: secondHalfFuelExpensesCount,
+          oilExpensesCount: secondHalfOilExpensesCount,
+          netIncome: secondHalfNetIncome
+        }
+      };
+    }
+  };
+
   const loadAndCalculateData = async () => {
     try {
       const [orders, fuelExpenses, oilChanges] = await Promise.all([
@@ -99,13 +217,14 @@ const Dashboard: React.FC = () => {
         DataModel.getOilChanges()
       ]);
 
-      // Calculate monthly totals for current month
-      const monthlyTotals = calculateMonthlyTotals(
+      // Calculate totals based on period type
+      const totals = calculateDataForPeriodType(
         orders,
         fuelExpenses,
         oilChanges,
         currentYear,
-        currentMonth
+        currentMonth,
+        periodType
       );
 
       // Calculate daily accumulation for the current month
@@ -141,8 +260,18 @@ const Dashboard: React.FC = () => {
         totalOrders,
         totalExpenses,
         netIncome: overallNetIncome,
-        firstHalfNetIncome: monthlyTotals.firstHalf.netIncome,
-        secondHalfNetIncome: monthlyTotals.secondHalf.netIncome,
+        firstHalfNetIncome: totals.firstHalf.netIncome,
+        secondHalfNetIncome: totals.secondHalf.netIncome,
+        firstHalfOrdersTotal: totals.firstHalf.ordersTotal,
+        secondHalfOrdersTotal: totals.secondHalf.ordersTotal,
+        firstHalfOrdersCount: totals.firstHalf.ordersCount,
+        secondHalfOrdersCount: totals.secondHalf.ordersCount,
+        firstHalfOrdersAvg: totals.firstHalf.ordersAvg,
+        secondHalfOrdersAvg: totals.secondHalf.ordersAvg,
+        firstHalfQtyTotal: totals.firstHalf.qtyTotal,
+        secondHalfQtyTotal: totals.secondHalf.qtyTotal,
+        firstHalfQtyAvg: totals.firstHalf.qtyAvg,
+        secondHalfQtyAvg: totals.secondHalf.qtyAvg,
         currentMonthOrders,
         currentMonthExpenses,
         currentMonthNetIncome,
@@ -173,6 +302,122 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // Export data functionality
+  const exportAllData = async () => {
+    try {
+      const exportedData = await ExportImportUtils.exportAllData();
+
+      // Show the data with copy functionality
+      Alert.alert(
+        'Ekspor Data',
+        'Data telah diekspor. Panjang data: ' + exportedData.length + ' karakter.',
+        [
+          {
+            text: 'Salin Data',
+            onPress: async () => {
+              await Clipboard.setStringAsync(exportedData);
+              Alert.alert('Berhasil', 'Data telah disalin ke clipboard!');
+            }
+          },
+          {
+            text: 'Lihat Data',
+            onPress: () => {
+              Alert.alert('Data Ekspor', exportedData.length > 1000 ?
+                exportedData.substring(0, 1000) + '... (data terlalu panjang untuk ditampilkan sepenuhnya)' :
+                exportedData, [
+                {
+                  text: 'Salin ke Clipboard',
+                  onPress: async () => {
+                    await Clipboard.setStringAsync(exportedData);
+                    Alert.alert('Berhasil', 'Data telah disalin ke clipboard!');
+                  }
+                },
+                { text: 'Tutup' }
+              ]);
+            }
+          },
+          { text: 'Tutup', style: 'cancel' }
+        ]
+      );
+    } catch (error) {
+      console.error('Kesalahan saat mengekspor data:', error);
+      Alert.alert('Kesalahan', 'Gagal mengekspor data. ' + (error as Error).message);
+    }
+  };
+
+  // Export REKAP ANTARAN functionality
+  const exportRekapAntaran = async () => {
+    try {
+      const exportedData = await ExportImportUtils.exportRekapAntaran();
+
+      // Show the data with copy functionality
+      Alert.alert(
+        'Ekspor REKAP ANTARAN',
+        'REKAP ANTARAN telah dibuat. Tekan "Salin" untuk menyalin teks.',
+        [
+          {
+            text: 'Salin Teks',
+            onPress: async () => {
+              await Clipboard.setStringAsync(exportedData);
+              Alert.alert('Berhasil', 'Teks REKAP ANTARAN telah disalin ke clipboard!');
+            }
+          },
+          {
+            text: 'Lihat Teks',
+            onPress: () => {
+              Alert.alert('REKAP ANTARAN', exportedData, [
+                {
+                  text: 'Salin ke Clipboard',
+                  onPress: async () => {
+                    await Clipboard.setStringAsync(exportedData);
+                    Alert.alert('Berhasil', 'Teks REKAP ANTARAN telah disalin!');
+                  }
+                },
+                { text: 'Tutup' }
+              ]);
+            }
+          },
+          { text: 'Tutup', style: 'cancel' }
+        ],
+        { cancelable: true }
+      );
+    } catch (error) {
+      console.error('Kesalahan saat mengekspor REKAP ANTARAN:', error);
+      Alert.alert('Kesalahan', 'Gagal mengekspor REKAP ANTARAN. ' + (error as Error).message);
+    }
+  };
+
+  // Import data functionality
+  const importData = async () => {
+    Alert.prompt(
+      'Impor Data',
+      'Masukkan data JSON atau format REKAP ANTARAN:',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Impor',
+          onPress: async (text) => {
+            if (text) {
+              try {
+                await ExportImportUtils.importData(text);
+                loadAndCalculateData(); // Reload data after import
+                Alert.alert('Sukses', 'Data berhasil diimpor dan ditampilkan di dasbor.');
+              } catch (error) {
+                console.error('Kesalahan saat mengimpor data:', error);
+                Alert.alert('Kesalahan', 'Gagal mengimpor data. ' + (error as Error).message);
+              }
+            } else {
+              Alert.alert('Peringatan', 'Data tidak boleh kosong.');
+            }
+          }
+        }
+      ],
+      'plain-text',
+      '',
+      'multiline'
+    );
+  };
+
   // Reset all data (for testing purposes)
   const resetAllData = async () => {
     Alert.alert(
@@ -185,12 +430,13 @@ const Dashboard: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.clear();
+              // Use the new DataModel method that handles both Supabase and local storage
+              await DataModel.resetAllData();
               loadAndCalculateData();
               Alert.alert('Sukses', 'Semua data telah diatur ulang');
             } catch (error) {
               console.error('Kesalahan saat mengatur ulang data:', error);
-              Alert.alert('Kesalahan', 'Gagal mengatur ulang data');
+              Alert.alert('Kesalahan', 'Gagal mengatur ulang data. Beberapa data mungkin masih tersisa.');
             }
           }
         }
@@ -274,6 +520,15 @@ const Dashboard: React.FC = () => {
             </View>
           </TouchableOpacity>
           <TouchableOpacity
+            style={[styles.tabButton, { backgroundColor: activeTab === 'spareparts' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
+            onPress={() => setActiveTab('spareparts')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={styles.tabIcon}>⚙️</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'spareparts' ? themeColors.activeTabText : themeColors.text }]}>Sparepart</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.tabButton, { backgroundColor: activeTab === 'settings' ? themeColors.activeTabBackground : themeColors.tabBackground }]}
             onPress={() => setActiveTab('settings')}
           >
@@ -299,6 +554,41 @@ const Dashboard: React.FC = () => {
           }
         >
           <Text style={[styles.title, { color: themeColors.text }]}>{isDarkMode ? '📊 Ringkasan Keuangan' : '📊 Ringkasan Keuangan'}</Text>
+
+          {/* Period Toggle Section */}
+          <View style={styles.switchContainer}>
+            <Text style={[styles.label, { color: themeColors.text, textAlign: 'center', marginBottom: 8 }]}>Pilih Mode Periode</Text>
+            <View style={[styles.switchOptionContainer, { backgroundColor: themeColors.cardBackground }]}>
+              <Pressable
+                style={[
+                  styles.switchOption,
+                  periodType === 'monthly' && styles.activeSwitchOption,
+                  { backgroundColor: periodType === 'monthly' ? themeColors.primaryButton : 'transparent' }
+                ]}
+                onPress={() => setPeriodType('monthly')}
+              >
+                <Text style={[
+                  styles.switchText,
+                  { color: periodType === 'monthly' ? themeColors.buttonText : themeColors.text },
+                  periodType === 'monthly' && styles.activeSwitchText
+                ]}>Bulanan</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.switchOption,
+                  periodType === 'semiMonthly' && styles.activeSwitchOption,
+                  { backgroundColor: periodType === 'semiMonthly' ? themeColors.primaryButton : 'transparent' }
+                ]}
+                onPress={() => setPeriodType('semiMonthly')}
+              >
+                <Text style={[
+                  styles.switchText,
+                  { color: periodType === 'semiMonthly' ? themeColors.buttonText : themeColors.text },
+                  periodType === 'semiMonthly' && styles.activeSwitchText
+                ]}>Mingguan (1-15 & 16-30)</Text>
+              </Pressable>
+            </View>
+          </View>
 
           {/* Month Navigation */}
           <View style={styles.monthNavigation}>
@@ -386,38 +676,100 @@ const Dashboard: React.FC = () => {
             </View>
           </View>
 
-          {/* Half-Month Summary Cards */}
+          {/* Half-Month Summary Cards - Updated based on period type */}
           <View style={styles.summaryContainer}>
             <Text style={[styles.monthlySummaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📅 Rincian Bulan Ini' : '📅 Rincian Bulan Ini'}</Text>
-            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
-              <View style={styles.cardContent}>
-                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (Awal Bulan)' : '📈 Pendapatan Bersih (Awal Bulan)'}</Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    summary.firstHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
-                    { color: summary.firstHalfNetIncome >= 0 ? themeColors.positive : themeColors.negative }
-                  ]}
-                >
-                  {formatCurrency(summary.firstHalfNetIncome)}
-                </Text>
-              </View>
-            </View>
 
-            <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
-              <View style={styles.cardContent}>
-                <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (Akhir Bulan)' : '📈 Pendapatan Bersih (Akhir Bulan)'}</Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    summary.secondHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
-                    { color: summary.secondHalfNetIncome >= 0 ? themeColors.positive : themeColors.negative }
-                  ]}
-                >
-                  {formatCurrency(summary.secondHalfNetIncome)}
-                </Text>
-              </View>
-            </View>
+            {periodType === 'semiMonthly' && (
+              <>
+                {/* First Half Period Stats */}
+                <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (1-15)' : '📈 Pendapatan Bersih (1-15)'}</Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        summary.firstHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
+                        { color: summary.firstHalfNetIncome >= 0 ? themeColors.positive : themeColors.negative }
+                      ]}
+                    >
+                      {formatCurrency(summary.firstHalfNetIncome)}
+                    </Text>
+                    {summary.firstHalfOrdersCount !== undefined && (
+                      <Text style={[styles.summarySubText, { color: themeColors.textSecondary }]}>
+                        {summary.firstHalfOrdersCount} pesanan • Rata2: {formatCurrency(summary.firstHalfOrdersAvg || 0)}
+                      </Text>
+                    )}
+                    {summary.firstHalfQtyTotal !== undefined && summary.firstHalfQtyTotal > 0 && (
+                      <Text style={[styles.summarySubText, { color: themeColors.textSecondary }]}>
+                        Jumlah barang: {summary.firstHalfQtyTotal} • Rata2: {(summary.firstHalfQtyAvg || 0).toFixed(1)}/pesanan
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Second Half Period Stats */}
+                <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bersih (16-' + new Date(currentYear, currentMonth + 1, 0).getDate() + ')' : '📈 Pendapatan Bersih (16-' + new Date(currentYear, currentMonth + 1, 0).getDate() + ')'}</Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        summary.secondHalfNetIncome >= 0 ? styles.positiveValue : styles.negativeValue,
+                        { color: summary.secondHalfNetIncome >= 0 ? themeColors.positive : themeColors.negative }
+                      ]}
+                    >
+                      {formatCurrency(summary.secondHalfNetIncome)}
+                    </Text>
+                    {summary.secondHalfOrdersCount !== undefined && (
+                      <Text style={[styles.summarySubText, { color: themeColors.textSecondary }]}>
+                        {summary.secondHalfOrdersCount} pesanan • Rata2: {formatCurrency(summary.secondHalfOrdersAvg || 0)}
+                      </Text>
+                    )}
+                    {summary.secondHalfQtyTotal !== undefined && summary.secondHalfQtyTotal > 0 && (
+                      <Text style={[styles.summarySubText, { color: themeColors.textSecondary }]}>
+                        Jumlah barang: {summary.secondHalfQtyTotal} • Rata2: {(summary.secondHalfQtyAvg || 0).toFixed(1)}/pesanan
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </>
+            )}
+
+            {periodType === 'monthly' && (
+              <>
+                <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pengeluaran Bulan Ini' : '📈 Pengeluaran Bulan Ini'}</Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { color: themeColors.negative }
+                      ]}
+                    >
+                      {formatCurrency(summary.currentMonthExpenses)}
+                    </Text>
+                    <Text style={[styles.summarySubText, { color: themeColors.textSecondary }]}>
+                      Pendapatan Bersih: {formatCurrency(summary.currentMonthNetIncome)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }]}>
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.summaryTitle, { color: themeColors.text }]}>{isDarkMode ? '📈 Pendapatan Bulan Ini' : '📈 Pendapatan Bulan Ini'}</Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { color: themeColors.positive }
+                      ]}
+                    >
+                      {formatCurrency(summary.currentMonthOrders)}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
           </View>
 
           {/* Daily Accumulation Section */}
@@ -450,6 +802,7 @@ const Dashboard: React.FC = () => {
       {activeTab === 'orders' && <OrderTracker />}
       {activeTab === 'fuel' && <FuelExpenseTracker />}
       {activeTab === 'oil' && <OilChangeTracker />}
+      {activeTab === 'spareparts' && <SparepartTracker />}
       {activeTab === 'settings' && (
         <View style={[styles.settingsTabContainer, { backgroundColor: themeColors.background, padding: 16 }]}>
           <Text style={[styles.settingsTabTitle, { color: themeColors.text }]}>{isDarkMode ? '⚙️ Pengaturan' : '⚙️ Pengaturan'}</Text>
@@ -480,6 +833,26 @@ const Dashboard: React.FC = () => {
                   </TouchableOpacity>
                 </View>
               </View>
+            </View>
+            <View style={styles.settingsExportImportContainer}>
+              <Pressable
+                style={({ pressed }) => [styles.exportButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
+                onPress={exportAllData}
+              >
+                <Text style={[styles.exportButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '📤 Ekspor Semua Data' : '📤 Ekspor Semua Data'}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.exportButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
+                onPress={exportRekapAntaran}
+              >
+                <Text style={[styles.exportButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '📊 Ekspor Rekap Antaran' : '📊 Ekspor Rekap Antaran'}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.importButton, pressed && styles.pressedButton, { backgroundColor: themeColors.primaryButton }]}
+                onPress={importData}
+              >
+                <Text style={[styles.importButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '📥 Impor Data' : '📥 Impor Data'}</Text>
+              </Pressable>
             </View>
             <Pressable
               style={({ pressed }) => [styles.resetButton, pressed && styles.pressedButton, { backgroundColor: themeColors.dangerButton }]}
@@ -769,6 +1142,55 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 70,
     alignItems: 'center',
+  },
+  settingsExportImportContainer: {
+    gap: 10,
+    marginBottom: 20,
+  },
+  exportButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  exportButtonText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  importButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  importButtonText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  switchContainer: {
+    marginBottom: 16,
+  },
+  switchOptionContainer: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    padding: 4,
+    marginTop: 8,
+  },
+  switchOption: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  activeSwitchOption: {},
+  switchText: {
+    fontWeight: '600',
+  },
+  activeSwitchText: {},
+  summarySubText: {
+    fontSize: 12,
+    marginTop: 4,
+    color: '#666',
   },
 });
 

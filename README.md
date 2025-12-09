@@ -1,12 +1,13 @@
 # Aplikasi Monitoring
 
-Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan harian, terutama untuk usaha kecil seperti pengemudi ojek, taksi, atau layanan transportasi lainnya. Aplikasi ini memungkinkan Anda untuk mencatat pesanan, pengeluaran bahan bakar, dan penggantian oli.
+Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan harian, terutama untuk usaha kecil seperti pengemudi ojek, taksi, atau layanan transportasi lainnya. Aplikasi ini memungkinkan Anda untuk mencatat pesanan, pengeluaran bahan bakar, penggantian oli, dan suku cadang kendaraan.
 
 ## Fitur
 
 - Pencatatan pesanan harian
 - Pencatatan pengeluaran bahan bakar
 - Pencatatan penggantian oli
+- Pencatatan suku cadang kendaraan
 - Ringkasan keuangan bulanan dan harian
 - Visualisasi data dalam bentuk kartu dan daftar
 - Pengaturan tanggal dan rentang waktu untuk analisis data
@@ -41,7 +42,9 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
    Lihat file ENV_SETUP.md untuk instruksi lengkap cara mendapatkan API keys.
 
 6. (Opsional) Jika ingin menggunakan Supabase, buat tabel database di Supabase:
-   - Jalankan perintah `node setup.mjs` untuk mendapatkan SQL yang perlu dijalankan
+   - Jalankan perintah `node setup.mjs` untuk mendapatkan SQL yang perlu dijalankan, atau
+   - Gunakan file `/sql/final_supabase_migration.sql` untuk skema lengkap (termasuk tabel spareparts)
+   - ATAU gunakan file `/sql/complete_supabase_fix.sql` yang mencakup semua skema dan perbaikan untuk masalah estimated_mileage
    - Salin dan tempel SQL tersebut ke editor SQL Supabase (Database → SQL Editor)
    - Klik "Run" untuk membuat tabel
 
@@ -76,11 +79,15 @@ monitoring/
 │   ├── Dashboard.tsx
 │   ├── OrderTracker.tsx
 │   ├── FuelExpenseTracker.tsx
-│   └── OilChangeTracker.tsx
+│   ├── OilChangeTracker.tsx
+│   └── SparepartTracker.tsx
 ├── models/
-├── utils/
+├── sql/
+│   ├── complete_supabase_fix.sql          # File utama - semua skema & perbaikan
+│   ├── daily_mileage.sql
+│   ├── final_supabase_migration.sql
+│   └── spareparts.sql
 ├── SUPABASE_SETUP.md
-├── supabase_migrations.sql
 ├── setup.mjs
 └── README.md
 ```
