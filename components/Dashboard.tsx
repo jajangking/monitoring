@@ -9,6 +9,7 @@ import { DataModel } from '../models/DataModel';
 import { calculateNetIncome, calculateMonthlyTotals, calculateCustomRangeTotals, getPredefinedDateRanges, calculateMonthlyDailyAccumulation, calculateDailyOrderCount, calculateTotalOrders, calculateTotalExpenses } from '../utils/Calculations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExportImportUtils } from '../utils/ExportImportUtils';
+import { useAuth } from '../contexts/AuthContext';
 
 // Define the main tabs
 type Tab = 'dashboard' | 'orders' | 'fuel' | 'oil' | 'spareparts' | 'settings';
@@ -59,6 +60,8 @@ const Dashboard: React.FC = () => {
   // Add state for dark mode
   const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
   const [userTheme, setUserTheme] = useState<'light' | 'dark' | 'system'>('system');
+
+  const { signOut } = useAuth();
 
   // Load all data and calculate summaries
   useEffect(() => {
@@ -415,6 +418,31 @@ const Dashboard: React.FC = () => {
       'plain-text',
       '',
       'multiline'
+    );
+  };
+
+  // Logout function
+  const handleLogout = async () => {
+    Alert.alert(
+      'Konfirmasi Logout',
+      'Apakah Anda yakin ingin keluar dari aplikasi?',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Keluar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+              // The auth context will handle redirecting to login screen
+              Alert.alert('Berhasil', 'Anda telah keluar dari aplikasi.');
+            } catch (error) {
+              console.error('Kesalahan saat logout:', error);
+              Alert.alert('Kesalahan', 'Gagal logout. Silakan coba lagi.');
+            }
+          }
+        }
+      ]
     );
   };
 
@@ -860,6 +888,12 @@ const Dashboard: React.FC = () => {
             >
               <Text style={[styles.resetButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '🗑️ Atur Ulang Semua Data' : '🗑️ Atur Ulang Semua Data'}</Text>
             </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.logoutButton, pressed && styles.pressedButton, { backgroundColor: themeColors.negative }]}
+              onPress={handleLogout}
+            >
+              <Text style={[styles.logoutButtonText, { color: themeColors.buttonText }]}>{isDarkMode ? '🚪 Keluar Aplikasi' : '🚪 Keluar Aplikasi'}</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -1042,6 +1076,17 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   resetButtonText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  logoutButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  logoutButtonText: {
     fontWeight: '600',
     fontSize: 16,
   },

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type User } from '@supabase/supabase-js';
 
 // Environment variables for Supabase
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -15,6 +15,16 @@ if (!SUPABASE_ANON_KEY) {
 export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
+
+// Get current user
+export const getCurrentUser = async (): Promise<User | null> => {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
 
 // Initialize Supabase with default values if environment variables are not set
 // This allows the app to work with a mock implementation when Supabase is not configured

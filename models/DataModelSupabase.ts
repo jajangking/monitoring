@@ -1,4 +1,4 @@
-import { supabase } from '../utils/supabaseClient';
+import { supabase, getCurrentUser } from '../utils/supabaseClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Storage keys for local storage
@@ -164,9 +164,19 @@ export class DataModelSupabase {
     };
 
     try {
+      // Get current user ID if authenticated
+      let userId: string | undefined;
+      try {
+        const user = await getCurrentUser();
+        userId = user?.id;
+      } catch (error) {
+        console.warn('Could not get current user, proceeding without user ID:', error);
+      }
+
       // Add to Supabase - map camelCase properties to snake_case columns
       const orderForDb = {
         ...orderWithDate,
+        created_by: userId, // Include the user ID
         price_per_item: orderWithDate.pricePerItem,  // Map camelCase to snake_case
         order_type: orderWithDate.orderType,  // Map camelCase to snake_case
       };
@@ -363,9 +373,23 @@ export class DataModelSupabase {
     };
 
     try {
+      // Get current user ID if authenticated
+      let userId: string | undefined;
+      try {
+        const user = await getCurrentUser();
+        userId = user?.id;
+      } catch (error) {
+        console.warn('Could not get current user, proceeding without user ID:', error);
+      }
+
+      const expenseWithUser = {
+        ...expenseWithDate,
+        created_by: userId, // Include the user ID
+      };
+
       const { data, error } = await supabase
         .from('fuel_expenses')
-        .insert([expenseWithDate])
+        .insert([expenseWithUser])
         .select();
 
       if (error) {
@@ -554,9 +578,23 @@ export class DataModelSupabase {
     };
 
     try {
+      // Get current user ID if authenticated
+      let userId: string | undefined;
+      try {
+        const user = await getCurrentUser();
+        userId = user?.id;
+      } catch (error) {
+        console.warn('Could not get current user, proceeding without user ID:', error);
+      }
+
+      const changeWithUser = {
+        ...changeWithDate,
+        created_by: userId, // Include the user ID
+      };
+
       const { data, error } = await supabase
         .from('oil_changes')
-        .insert([changeWithDate])
+        .insert([changeWithUser])
         .select();
 
       if (error) {
@@ -819,12 +857,23 @@ export class DataModelSupabase {
     };
 
     try {
+      // Get current user ID if authenticated and not already provided
+      let userId: string | undefined = mileageWithDate.created_by;
+      if (!userId) {
+        try {
+          const user = await getCurrentUser();
+          userId = user?.id;
+        } catch (error) {
+          console.warn('Could not get current user, proceeding without user ID:', error);
+        }
+      }
+
       // Map camelCase properties to snake_case columns for Supabase
       const mileageForDb = {
         date: mileageWithDate.date,
         mileage: mileageWithDate.mileage,
         note: mileageWithDate.note,
-        created_by: mileageWithDate.created_by,
+        created_by: userId,
         motorcycle_id: mileageWithDate.motorcycleId  // Map camelCase to snake_case
       };
 
@@ -1046,6 +1095,15 @@ export class DataModelSupabase {
     };
 
     try {
+      // Get current user ID if authenticated
+      let userId: string | undefined;
+      try {
+        const user = await getCurrentUser();
+        userId = user?.id;
+      } catch (error) {
+        console.warn('Could not get current user, proceeding without user ID:', error);
+      }
+
       // Map camelCase properties to snake_case columns
       const sparepartForDb = {
         name: sparepartWithDate.name,
@@ -1055,7 +1113,8 @@ export class DataModelSupabase {
         date_installed: sparepartWithDate.dateInstalled,
         date_replaced: sparepartWithDate.dateReplaced,
         note: sparepartWithDate.note,
-        status: sparepartWithDate.status
+        status: sparepartWithDate.status,
+        created_by: userId, // Include the user ID
       };
 
       const { data, error } = await supabase
@@ -1251,6 +1310,15 @@ export class DataModelSupabase {
     }
 
     try {
+      // Get current user ID if authenticated
+      let userId: string | undefined;
+      try {
+        const user = await getCurrentUser();
+        userId = user?.id;
+      } catch (error) {
+        console.warn('Could not get current user, proceeding without user ID:', error);
+      }
+
       // Map camelCase properties to snake_case columns for Supabase
       const motorcycleForDb = {
         name: motorcycle.name,
@@ -1258,7 +1326,8 @@ export class DataModelSupabase {
         model: motorcycle.model,
         year: motorcycle.year,
         license_plate: motorcycle.licensePlate,  // Map camelCase to snake_case
-        description: motorcycle.description
+        description: motorcycle.description,
+        created_by: userId, // Include the user ID
       };
 
       const { data, error } = await supabase

@@ -9,6 +9,8 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
 - Pencatatan penggantian oli
 - Pencatatan suku cadang kendaraan
 - **Fitur baru: Manajemen multi-motor (dapat mengelola data untuk lebih dari 1 motor)**
+- Login & registrasi pengguna (email/password dan Google OAuth)
+- Keamanan data berbasis pengguna (data hanya dapat diakses oleh pemiliknya)
 - Ringkasan keuangan bulanan dan harian
 - Visualisasi data dalam bentuk kartu dan daftar
 - Pengaturan tanggal dan rentang waktu untuk analisis data
@@ -80,18 +82,27 @@ monitoring/
 ├── App.tsx
 ├── components/
 │   ├── Dashboard.tsx
+│   ├── LoginScreen.tsx
+│   ├── ProtectedRoute.tsx
 │   ├── OrderTracker.tsx
 │   ├── FuelExpenseTracker.tsx
 │   ├── OilChangeTracker.tsx
 │   └── SparepartTracker.tsx
+├── contexts/
+│   └── AuthContext.tsx
 ├── models/
 ├── sql/
 │   ├── complete_supabase_fix.sql          # File utama - semua skema & perbaikan
 │   ├── daily_mileage.sql
 │   ├── final_supabase_migration.sql
-│   └── spareparts.sql
-├── SUPABASE_SETUP.md
-├── setup.mjs
+│   ├── spareparts.sql
+│   ├── motorcycle_updates.sql
+│   ├── user_specific_schema.sql           # Skema untuk data berbasis pengguna
+│   └── master_schema.sql
+├── utils/
+│   ├── supabaseClient.ts
+│   └── ...
+├── GOOGLE_AUTH_SETUP.md                   # Dokumentasi setup autentikasi Google
 └── README.md
 ```
 
