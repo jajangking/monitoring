@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Pressable, ScrollView, RefreshControl, Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { DataModel, DailyMileage, Sparepart } from '../models/DataModel';
+import { DataModel, DailyMileage, Sparepart, Motorcycle } from '../models/DataModel';
+import { MotorcycleSelector } from './MotorcycleSelector';
 
 export const SparepartTracker: React.FC = () => {
   const [spareparts, setSpareparts] = useState<Sparepart[]>([]);
@@ -17,6 +18,8 @@ export const SparepartTracker: React.FC = () => {
   const [sparepartStatus, setSparepartStatus] = useState<'active' | 'replaced'>('active');
   const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
   const [searchText, setSearchText] = useState('');
+  // State for motorcycle selection
+  const [selectedMotorcycleId, setSelectedMotorcycleId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSpareparts();
@@ -79,7 +82,7 @@ export const SparepartTracker: React.FC = () => {
   // Load spareparts data from database
   const loadSpareparts = async () => {
     try {
-      const sparepartData = await DataModel.getSpareparts();
+      const sparepartData = await DataModel.getSpareparts(selectedMotorcycleId);
       setSpareparts(sparepartData);
     } catch (error) {
       console.error('Error loading spareparts:', error);
@@ -90,7 +93,7 @@ export const SparepartTracker: React.FC = () => {
   // Load daily mileage data from database
   const loadDailyMileages = async () => {
     try {
-      const mileageData = await DataModel.getDailyMileages();
+      const mileageData = await DataModel.getDailyMileages(selectedMotorcycleId);
       setDailyMileages(mileageData);
     } catch (error) {
       console.error('Error loading daily mileages:', error);
@@ -102,7 +105,7 @@ export const SparepartTracker: React.FC = () => {
   const calculateDistanceToReplacement = (sparepart: Sparepart): number | null => {
     if (sparepart.status === 'replaced') return 0;
 
-    // Get the latest daily mileage record
+    // Get the latest daily mileage record for the same motorcycle
     if (dailyMileages.length > 0) {
       const sortedDaily = [...dailyMileages].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const latestDailyMileage = sortedDaily[0];
@@ -139,7 +142,8 @@ export const SparepartTracker: React.FC = () => {
           estimatedMileage: estimatedMileageNum,
           dateInstalled: sparepartDateInstalled,
           note: sparepartNote || undefined,
-          status: sparepartStatus
+          status: sparepartStatus,
+          motorcycleId: selectedMotorcycleId || undefined  // Include motorcycleId
         };
 
         await DataModel.updateSparepart(updatedSparepart);
@@ -151,7 +155,8 @@ export const SparepartTracker: React.FC = () => {
           estimatedMileage: estimatedMileageNum,
           dateInstalled: sparepartDateInstalled,
           note: sparepartNote || undefined,
-          status: 'active'
+          status: 'active',
+          motorcycleId: selectedMotorcycleId || undefined  // Include motorcycleId
         };
 
         await DataModel.addSparepart(newSparepart);
@@ -255,6 +260,14 @@ export const SparepartTracker: React.FC = () => {
       }
     >
       <Text style={[styles.title, { color: themeColors.text }]}>Pelacak Sparepart</Text>
+
+      {/* Motorcycle Selector */}
+      <MotorcycleSelector
+        onMotorcycleSelect={(motorcycle) => {
+          setSelectedMotorcycleId(motorcycle?.id || null);
+        }}
+        selectedMotorcycleId={selectedMotorcycleId}
+      />
 
       <View style={styles.header}>
         <View style={styles.searchContainer}>

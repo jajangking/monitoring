@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Alert, Pressable, ScrollView, RefreshControl, Appearance } from 'react-native';
-import { DataModel, OilChange } from '../models/DataModel';
+import { DataModel, OilChange, Motorcycle } from '../models/DataModel';
 import { DailyMileage } from '../models/DataModelSupabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../utils/supabaseClient';
+import { MotorcycleSelector } from './MotorcycleSelector';
 
 interface OilChangeFormProps {
   onSubmit: (change: Omit<OilChange, 'id'>) => void;
@@ -225,6 +226,8 @@ export const OilChangeTracker: React.FC = () => {
   const [customInterval, setCustomInterval] = useState<number | null>(null);
   const [showCustomIntervalForm, setShowCustomIntervalForm] = useState(false);
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
+  // State for motorcycle selection
+  const [selectedMotorcycleId, setSelectedMotorcycleId] = useState<string | null>(null);
 
   useEffect(() => {
     loadChanges();
@@ -370,7 +373,7 @@ export const OilChangeTracker: React.FC = () => {
     try {
       // Use the updated DataModelSupabase.getDailyMileagesLimited function
       // which combines both Supabase and local storage data and limits to 3 most recent
-      const mileageData = await DataModel.getDailyMileagesLimited(3);
+      const mileageData = await DataModel.getDailyMileagesLimited(3, selectedMotorcycleId);
       setDailyMileages(mileageData);
     } catch (error) {
       console.error('Error loading daily mileages:', error);
@@ -388,7 +391,8 @@ export const OilChangeTracker: React.FC = () => {
     const newMileage: Omit<DailyMileage, 'id'> = {
       date: new Date().toISOString().split('T')[0], // Today's date
       mileage: parseFloat(currentMileage),
-      note: mileageNote || undefined
+      note: mileageNote || undefined,
+      motorcycleId: selectedMotorcycleId || undefined  // Associate with selected motorcycle
     };
 
     try {
@@ -500,12 +504,15 @@ export const OilChangeTracker: React.FC = () => {
   };
 
   const loadChanges = async () => {
-    const loadedChanges = await DataModel.getOilChanges();
+    const loadedChanges = await DataModel.getOilChanges(selectedMotorcycleId);
     setChanges(loadedChanges);
   };
 
   const handleAddChange = async (changeData: Omit<OilChange, 'id'>) => {
-    await DataModel.addOilChange(changeData);
+    await DataModel.addOilChange({
+      ...changeData,
+      motorcycleId: selectedMotorcycleId || undefined
+    });
     loadChanges();
     setShowForm(false);
   };
@@ -514,7 +521,8 @@ export const OilChangeTracker: React.FC = () => {
     if (!editingChange) return; // Safety check
     const updatedChange: OilChange = {
       ...editingChange,  // Preserve the original change's id
-      ...changeData      // Override with new values
+      ...changeData,     // Override with new values
+      motorcycleId: selectedMotorcycleId || undefined  // Ensure motorcycleId is set
     };
     await DataModel.updateOilChange(updatedChange);
     loadChanges();
@@ -576,6 +584,14 @@ export const OilChangeTracker: React.FC = () => {
       }
     >
       <Text style={[styles.title, { color: themeColors.text }]}>Pelacak Penggantian Oli</Text>
+
+      {/* Motorcycle Selector */}
+      <MotorcycleSelector
+        onMotorcycleSelect={(motorcycle) => {
+          setSelectedMotorcycleId(motorcycle?.id || null);
+        }}
+        selectedMotorcycleId={selectedMotorcycleId}
+      />
 
       {/* Oil Change Monitoring Summary */}
       <View style={[styles.summaryCard, { backgroundColor: themeColors.cardBackground, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, marginBottom: 16 }]}>

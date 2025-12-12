@@ -8,6 +8,7 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
 - Pencatatan pengeluaran bahan bakar
 - Pencatatan penggantian oli
 - Pencatatan suku cadang kendaraan
+- **Fitur baru: Manajemen multi-motor (dapat mengelola data untuk lebih dari 1 motor)**
 - Ringkasan keuangan bulanan dan harian
 - Visualisasi data dalam bentuk kartu dan daftar
 - Pengaturan tanggal dan rentang waktu untuk analisis data
@@ -45,6 +46,8 @@ Aplikasi ini dirancang untuk membantu Anda memantau dan mengelola keuangan haria
    - Jalankan perintah `node setup.mjs` untuk mendapatkan SQL yang perlu dijalankan, atau
    - Gunakan file `/sql/final_supabase_migration.sql` untuk skema lengkap (termasuk tabel spareparts)
    - ATAU gunakan file `/sql/complete_supabase_fix.sql` yang mencakup semua skema dan perbaikan untuk masalah estimated_mileage
+   - **Untuk fitur multi-motor, tambahkan juga skema berikut ke database Anda:**
+     - Gunakan file `/sql/motorcycle_updates.sql` untuk menambahkan tabel dan kolom yang diperlukan untuk manajemen multi-motor
    - Salin dan tempel SQL tersebut ke editor SQL Supabase (Database → SQL Editor)
    - Klik "Run" untuk membuat tabel
 

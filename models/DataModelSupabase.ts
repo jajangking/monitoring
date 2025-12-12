@@ -7,6 +7,7 @@ const FUEL_EXPENSE_STORAGE_KEY = '@fuel_expenses';
 const OIL_CHANGE_STORAGE_KEY = '@oil_changes';
 const DAILY_MILEAGE_STORAGE_KEY = '@daily_mileage';
 const SPAREPART_STORAGE_KEY = '@spareparts';
+const MOTORCYCLE_STORAGE_KEY = '@motorcycles';
 
 // Define TypeScript interfaces (same as before)
 export interface Order {
@@ -40,6 +41,7 @@ export interface OilChange {
   date: string; // ISO string format
   mileage?: number; // in kilometers
   description?: string;
+  motorcycleId?: string; // ID to identify which motorcycle this change belongs to
   created_at?: string; // timestamp for accurate sorting
   updated_at?: string; // timestamp for tracking updates
 }
@@ -50,6 +52,7 @@ export interface DailyMileage {
   mileage: number; // mileage in kilometers
   note?: string; // optional note
   created_by?: string; // user ID (nullable for backward compatibility)
+  motorcycleId?: string; // ID to identify which motorcycle this mileage record belongs to
   created_at?: string; // timestamp for accurate sorting
   updated_at?: string; // timestamp for tracking updates
 }
@@ -64,8 +67,21 @@ export interface Sparepart {
   dateReplaced?: string;    // Tanggal penggantian (jika sudah diganti)
   note?: string;            // Catatan tambahan
   status: 'active' | 'replaced'; // Status sparepart
+  motorcycleId?: string; // ID to identify which motorcycle this sparepart belongs to
   created_at?: string; // timestamp for accurate sorting
   updated_at?: string; // timestamp for tracking updates
+}
+
+export interface Motorcycle {
+  id: string;
+  name: string;           // Name of the motorcycle (e.g., "Honda Vario", "Yamaha NMAX")
+  brand?: string;         // Brand of the motorcycle
+  model?: string;         // Model of the motorcycle
+  year?: number;          // Year of the motorcycle
+  licensePlate?: string;  // License plate number
+  description?: string;   // Additional description
+  created_at?: string;    // timestamp for accurate sorting
+  updated_at?: string;    // timestamp for tracking updates
 }
 
 export class DataModelSupabase {
@@ -460,17 +476,23 @@ export class DataModelSupabase {
   }
 
   // Oil Changes
-  static async getOilChanges(): Promise<OilChange[]> {
+  static async getOilChanges(motorcycleId?: string): Promise<OilChange[]> {
     const supabaseChanges: OilChange[] = [];
     const localChanges: OilChange[] = [];
 
     // Get data from Supabase if available
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('oil_changes')
           .select('*')
           .order('created_at', { ascending: false }); // Use created_at for accurate sorting
+
+        if (motorcycleId) {
+          query = query.eq('motorcycle_id', motorcycleId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Error fetching oil changes from Supabase:', error);
@@ -484,7 +506,10 @@ export class DataModelSupabase {
 
     // Get data from local storage
     try {
-      const localData = await DataModel.getLocalOilChanges();
+      let localData = await DataModel.getLocalOilChanges();
+      if (motorcycleId) {
+        localData = localData.filter(change => change.motorcycleId === motorcycleId);
+      }
       localChanges.push(...localData);
     } catch (error) {
       console.error('Error fetching oil changes from local storage:', error);
@@ -577,7 +602,8 @@ export class DataModelSupabase {
             amount: change.amount,
             date: change.date,
             description: change.description,
-            mileage: change.mileage
+            mileage: change.mileage,
+            motorcycle_id: change.motorcycleId  // Include motorcycleId in the update
           })
           .eq('id', change.id);
 
@@ -642,17 +668,23 @@ export class DataModelSupabase {
   }
 
   // Daily Mileage Records
-  static async getDailyMileages(): Promise<DailyMileage[]> {
+  static async getDailyMileages(motorcycleId?: string): Promise<DailyMileage[]> {
     const supabaseMileages: DailyMileage[] = [];
     const localMileages: DailyMileage[] = [];
 
     // Get data from Supabase if available
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('daily_mileage')
           .select('*')
           .order('date', { ascending: false });
+
+        if (motorcycleId) {
+          query = query.eq('motorcycle_id', motorcycleId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Error fetching daily mileages from Supabase:', error);
@@ -666,7 +698,10 @@ export class DataModelSupabase {
 
     // Get data from local storage
     try {
-      const localData = await DataModel.getLocalDailyMileages();
+      let localData = await DataModel.getLocalDailyMileages();
+      if (motorcycleId) {
+        localData = localData.filter(mileage => mileage.motorcycleId === motorcycleId);
+      }
       localMileages.push(...localData);
     } catch (error) {
       console.error('Error fetching daily mileages from local storage:', error);
@@ -693,7 +728,7 @@ export class DataModelSupabase {
     return allMileages;
   }
 
-  static async getDailyMileagesLimited(limit: number): Promise<DailyMileage[]> {
+  static async getDailyMileagesLimited(limit: number, motorcycleId?: string): Promise<DailyMileage[]> {
     // Get all data from both sources without using the cached/sorted version
     const supabaseMileages: DailyMileage[] = [];
     const localMileages: DailyMileage[] = [];
@@ -701,10 +736,16 @@ export class DataModelSupabase {
     // Get fresh data from Supabase - include created_at for accurate sorting
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('daily_mileage')
           .select('*')
           .order('created_at', { ascending: false }); // Sort by created_at for accurate ordering
+
+        if (motorcycleId) {
+          query = query.eq('motorcycle_id', motorcycleId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Error fetching daily mileages from Supabase:', error);
@@ -718,7 +759,10 @@ export class DataModelSupabase {
 
     // Get data from local storage
     try {
-      const localData = await DataModel.getLocalDailyMileages();
+      let localData = await DataModel.getLocalDailyMileages();
+      if (motorcycleId) {
+        localData = localData.filter(mileage => mileage.motorcycleId === motorcycleId);
+      }
       localMileages.push(...localData);
     } catch (error) {
       console.error('Error fetching daily mileages from local storage:', error);
@@ -775,10 +819,19 @@ export class DataModelSupabase {
     };
 
     try {
+      // Map camelCase properties to snake_case columns for Supabase
+      const mileageForDb = {
+        date: mileageWithDate.date,
+        mileage: mileageWithDate.mileage,
+        note: mileageWithDate.note,
+        created_by: mileageWithDate.created_by,
+        motorcycle_id: mileageWithDate.motorcycleId  // Map camelCase to snake_case
+      };
+
       // Supabase will generate the UUID automatically since the column has DEFAULT gen_random_uuid()
       const { data, error } = await supabase
         .from('daily_mileage')
-        .insert([mileageWithDate])
+        .insert([mileageForDb])
         .select();
 
       if (error) {
@@ -823,7 +876,8 @@ export class DataModelSupabase {
           .update({
             date: mileage.date,
             mileage: mileage.mileage,
-            note: mileage.note
+            note: mileage.note,
+            motorcycle_id: mileage.motorcycleId  // Include motorcycleId in the update
           })
           .eq('id', mileage.id);
 
@@ -888,17 +942,23 @@ export class DataModelSupabase {
   }
 
   // Sparepart Management
-  static async getSpareparts(): Promise<Sparepart[]> {
+  static async getSpareparts(motorcycleId?: string): Promise<Sparepart[]> {
     const supabaseSpareparts: Sparepart[] = [];
     const localSpareparts: Sparepart[] = [];
 
     // Get data from Supabase if available
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('spareparts') // Using a new table name
           .select('*')
           .order('created_at', { ascending: false }); // Use created_at for accurate sorting
+
+        if (motorcycleId) {
+          query = query.eq('motorcycle_id', motorcycleId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Error fetching spareparts from Supabase:', error);
@@ -941,7 +1001,7 @@ export class DataModelSupabase {
 
     // Get data from local storage
     try {
-      const localData = await DataModel.getLocalSpareparts();
+      let localData = await DataModel.getLocalSpareparts(motorcycleId);
       localSpareparts.push(...localData);
     } catch (error) {
       console.error('Error fetching spareparts from local storage:', error);
@@ -1050,7 +1110,8 @@ export class DataModelSupabase {
             date_installed: sparepart.dateInstalled,
             date_replaced: sparepart.dateReplaced,
             note: sparepart.note,
-            status: sparepart.status
+            status: sparepart.status,
+            motorcycle_id: sparepart.motorcycleId  // Include motorcycleId in the update
           })
           .eq('id', sparepart.id);
 
@@ -1111,6 +1172,206 @@ export class DataModelSupabase {
       console.error('Unexpected error deleting sparepart:', error);
       // Fallback to AsyncStorage
       await DataModel.deleteLocalSparepart(sparepartId);
+    }
+  }
+
+  // Motorcycle Management
+  static async getMotorcycles(): Promise<Motorcycle[]> {
+    const supabaseMotorcycles: Motorcycle[] = [];
+    const localMotorcycles: Motorcycle[] = [];
+
+    // Get data from Supabase if available
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('motorcycles') // Using a new table name
+          .select('*')
+          .order('created_at', { ascending: false }); // Use created_at for accurate sorting
+
+        if (error) {
+          console.error('Error fetching motorcycles from Supabase:', error);
+        } else {
+          // Convert snake_case column names back to camelCase for TypeScript interface
+          const motorcycles: Motorcycle[] = data.map(row => ({
+            ...row,
+            licensePlate: row.license_plate,  // Map snake_case to camelCase
+          }));
+
+          // Remove the snake_case properties to maintain clean interface
+          const cleanMotorcycles = motorcycles.map(({ license_plate, ...motorcycle }) => ({
+            ...motorcycle,
+            licensePlate: license_plate
+          }) as Motorcycle);
+
+          supabaseMotorcycles.push(...cleanMotorcycles);
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching motorcycles from Supabase:', error);
+      }
+    }
+
+    // Get data from local storage
+    try {
+      const localData = await DataModel.getLocalMotorcycles();
+      localMotorcycles.push(...localData);
+    } catch (error) {
+      console.error('Error fetching motorcycles from local storage:', error);
+    }
+
+    // Combine both arrays, removing duplicates (prioritizing Supabase data)
+    const allMotorcyclesMap = new Map<string, Motorcycle>();
+
+    // Add local motorcycles first
+    localMotorcycles.forEach(motorcycle => {
+      allMotorcyclesMap.set(motorcycle.id, motorcycle);
+    });
+
+    // Add/update with Supabase motorcycles (these take priority)
+    supabaseMotorcycles.forEach(motorcycle => {
+      allMotorcyclesMap.set(motorcycle.id, motorcycle);
+    });
+
+    const allMotorcycles = Array.from(allMotorcyclesMap.values());
+
+    // Sort by created_at descending (newest first), fallback to date if needed
+    allMotorcycles.sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : new Date().getTime();
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : new Date().getTime();
+      return timeB - timeA; // newest first
+    });
+
+    return allMotorcycles;
+  }
+
+  static async addMotorcycle(motorcycle: Omit<Motorcycle, 'id'>): Promise<void> {
+    // If Supabase client is not available, fallback to local storage
+    if (!supabase) {
+      console.warn('Supabase not available, saving to local storage');
+      return await DataModel.addLocalMotorcycle(motorcycle);
+    }
+
+    try {
+      // Map camelCase properties to snake_case columns for Supabase
+      const motorcycleForDb = {
+        name: motorcycle.name,
+        brand: motorcycle.brand,
+        model: motorcycle.model,
+        year: motorcycle.year,
+        license_plate: motorcycle.licensePlate,  // Map camelCase to snake_case
+        description: motorcycle.description
+      };
+
+      const { data, error } = await supabase
+        .from('motorcycles')
+        .insert([motorcycleForDb])
+        .select();
+
+      if (error) {
+        console.error('Error adding motorcycle to Supabase:', error);
+        // Fallback to AsyncStorage
+        return await DataModel.addLocalMotorcycle(motorcycle);
+      }
+
+      console.log('Motorcycle saved to Supabase successfully');
+
+      // Also save to local storage to maintain consistency
+      // We'll create a local version with the returned Supabase ID
+      if (data && data.length > 0) {
+        const supabaseMotorcycle: Motorcycle = {
+          ...motorcycle,
+          id: data[0].id
+        };
+        await DataModel.addLocalMotorcycleWithId(supabaseMotorcycle);
+      }
+    } catch (error) {
+      console.error('Unexpected error adding motorcycle:', error);
+      // Fallback to AsyncStorage
+      return await DataModel.addLocalMotorcycle(motorcycle);
+    }
+  }
+
+  static async updateMotorcycle(motorcycle: Motorcycle): Promise<void> {
+    // If Supabase client is not available, fallback to local storage
+    if (!supabase) {
+      return await DataModel.updateLocalMotorcycle(motorcycle);
+    }
+
+    try {
+      // Check if the ID is a numeric string (likely from local storage)
+      // If it's not a valid UUID format, we can't update it from Supabase
+      // Only attempt update if it's a UUID format
+      const isUUIDFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(motorcycle.id);
+
+      if (isUUIDFormat) {
+        const { error } = await supabase
+          .from('motorcycles')
+          .update({
+            name: motorcycle.name,
+            brand: motorcycle.brand,
+            model: motorcycle.model,
+            year: motorcycle.year,
+            license_plate: motorcycle.licensePlate,  // Map camelCase to snake_case
+            description: motorcycle.description
+          })
+          .eq('id', motorcycle.id);
+
+        if (error) {
+          console.error('Error updating motorcycle in Supabase:', error);
+          // If it's a UUID but update failed, still try local update
+          await DataModel.updateLocalMotorcycle(motorcycle);
+          return;
+        }
+      } else {
+        // If it's not UUID format, it might be a locally generated ID
+        // In this case, skip Supabase update and only update in local storage
+        console.log(`Skipping Supabase update for non-UUID ID: ${motorcycle.id}`);
+      }
+
+      // Always update in local storage
+      await DataModel.updateLocalMotorcycle(motorcycle);
+    } catch (error) {
+      console.error('Unexpected error updating motorcycle:', error);
+      // Fallback to AsyncStorage
+      await DataModel.updateLocalMotorcycle(motorcycle);
+    }
+  }
+
+  static async deleteMotorcycle(motorcycleId: string): Promise<void> {
+    // If Supabase client is not available, fallback to local storage
+    if (!supabase) {
+      return await DataModel.deleteLocalMotorcycle(motorcycleId);
+    }
+
+    try {
+      // Check if the ID is a numeric string (likely from local storage)
+      // If it's not a valid UUID format, we can't delete it from Supabase
+      // Only attempt deletion if it's a UUID format
+      const isUUIDFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(motorcycleId);
+
+      if (isUUIDFormat) {
+        const { error } = await supabase
+          .from('motorcycles')
+          .delete()
+          .eq('id', motorcycleId);
+
+        if (error) {
+          console.error('Error deleting motorcycle from Supabase:', error);
+          // If it's a UUID but deletion failed, still try local deletion
+          await DataModel.deleteLocalMotorcycle(motorcycleId);
+          return;
+        }
+      } else {
+        // If it's not UUID format, it might be a locally generated ID
+        // In this case, skip Supabase deletion and only delete from local storage
+        console.log(`Skipping Supabase deletion for non-UUID ID: ${motorcycleId}`);
+      }
+
+      // Always delete from local storage
+      await DataModel.deleteLocalMotorcycle(motorcycleId);
+    } catch (error) {
+      console.error('Unexpected error deleting motorcycle:', error);
+      // Fallback to AsyncStorage
+      await DataModel.deleteLocalMotorcycle(motorcycleId);
     }
   }
 
@@ -1437,10 +1698,17 @@ class DataModel {
   }
 
   // Oil Changes - Local Implementation
-  static async getLocalOilChanges(): Promise<OilChange[]> {
+  static async getLocalOilChanges(motorcycleId?: string): Promise<OilChange[]> {
     try {
       const changesData = await AsyncStorage.getItem(DataModel.OIL_CHANGE_STORAGE_KEY);
-      return changesData ? JSON.parse(changesData) : [];
+      let changes = changesData ? JSON.parse(changesData) : [];
+
+      // Filter by motorcycleId if provided
+      if (motorcycleId) {
+        changes = changes.filter(change => change.motorcycleId === motorcycleId);
+      }
+
+      return changes;
     } catch (error) {
       console.error('Error getting oil changes from local storage:', error);
       return [];
@@ -1504,10 +1772,17 @@ class DataModel {
   // Daily Mileage Records - Local Implementation
   static DAILY_MILEAGE_STORAGE_KEY = '@daily_mileage';
 
-  static async getLocalDailyMileages(): Promise<DailyMileage[]> {
+  static async getLocalDailyMileages(motorcycleId?: string): Promise<DailyMileage[]> {
     try {
       const mileageData = await AsyncStorage.getItem(DataModel.DAILY_MILEAGE_STORAGE_KEY);
-      return mileageData ? JSON.parse(mileageData) : [];
+      let mileages = mileageData ? JSON.parse(mileageData) : [];
+
+      // Filter by motorcycleId if provided
+      if (motorcycleId) {
+        mileages = mileages.filter(mileage => mileage.motorcycleId === motorcycleId);
+      }
+
+      return mileages;
     } catch (error) {
       console.error('Error getting daily mileages from local storage:', error);
       return [];
@@ -1571,10 +1846,17 @@ class DataModel {
   // Sparepart Management - Local Implementation
   static SPAREPART_STORAGE_KEY = '@spareparts';
 
-  static async getLocalSpareparts(): Promise<Sparepart[]> {
+  static async getLocalSpareparts(motorcycleId?: string): Promise<Sparepart[]> {
     try {
       const sparepartData = await AsyncStorage.getItem(DataModel.SPAREPART_STORAGE_KEY);
-      return sparepartData ? JSON.parse(sparepartData) : [];
+      let spareparts = sparepartData ? JSON.parse(sparepartData) : [];
+
+      // Filter by motorcycleId if provided
+      if (motorcycleId) {
+        spareparts = spareparts.filter(sparepart => sparepart.motorcycleId === motorcycleId);
+      }
+
+      return spareparts;
     } catch (error) {
       console.error('Error getting spareparts from local storage:', error);
       return [];
@@ -1632,6 +1914,73 @@ class DataModel {
       await AsyncStorage.setItem(DataModel.SPAREPART_STORAGE_KEY, JSON.stringify(updatedSpareparts));
     } catch (error) {
       console.error('Error deleting sparepart from local storage:', error);
+    }
+  }
+
+  // Motorcycle Management - Local Implementation
+  static MOTORCYCLE_STORAGE_KEY = '@motorcycles';
+
+  static async getLocalMotorcycles(): Promise<Motorcycle[]> {
+    try {
+      const motorcycleData = await AsyncStorage.getItem(DataModel.MOTORCYCLE_STORAGE_KEY);
+      return motorcycleData ? JSON.parse(motorcycleData) : [];
+    } catch (error) {
+      console.error('Error getting motorcycles from local storage:', error);
+      return [];
+    }
+  }
+
+  static async addLocalMotorcycle(motorcycle: Omit<Motorcycle, 'id'>): Promise<void> {
+    try {
+      const motorcycles = await DataModel.getLocalMotorcycles();
+      const newMotorcycle: Motorcycle = {
+        ...motorcycle,
+        id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9),
+      };
+      motorcycles.push(newMotorcycle);
+      await AsyncStorage.setItem(DataModel.MOTORCYCLE_STORAGE_KEY, JSON.stringify(motorcycles));
+    } catch (error) {
+      console.error('Error adding motorcycle to local storage:', error);
+    }
+  }
+
+  static async addLocalMotorcycleWithId(motorcycle: Motorcycle): Promise<void> {
+    try {
+      const motorcycles = await DataModel.getLocalMotorcycles();
+      // Check if motorcycle with this ID already exists
+      const existingIndex = motorcycles.findIndex(item => item.id === motorcycle.id);
+      if (existingIndex !== -1) {
+        // Update existing motorcycle
+        motorcycles[existingIndex] = motorcycle;
+      } else {
+        // Add new motorcycle
+        motorcycles.push(motorcycle);
+      }
+      await AsyncStorage.setItem(DataModel.MOTORCYCLE_STORAGE_KEY, JSON.stringify(motorcycles));
+    } catch (error) {
+      console.error('Error adding motorcycle with ID to local storage:', error);
+    }
+  }
+
+  static async updateLocalMotorcycle(motorcycle: Motorcycle): Promise<void> {
+    try {
+      const motorcycles = await DataModel.getLocalMotorcycles();
+      const updatedMotorcycles = motorcycles.map(item =>
+        item.id === motorcycle.id ? motorcycle : item
+      );
+      await AsyncStorage.setItem(DataModel.MOTORCYCLE_STORAGE_KEY, JSON.stringify(updatedMotorcycles));
+    } catch (error) {
+      console.error('Error updating motorcycle in local storage:', error);
+    }
+  }
+
+  static async deleteLocalMotorcycle(motorcycleId: string): Promise<void> {
+    try {
+      const motorcycles = await DataModel.getLocalMotorcycles();
+      const updatedMotorcycles = motorcycles.filter(item => item.id !== motorcycleId);
+      await AsyncStorage.setItem(DataModel.MOTORCYCLE_STORAGE_KEY, JSON.stringify(updatedMotorcycles));
+    } catch (error) {
+      console.error('Error deleting motorcycle from local storage:', error);
     }
   }
 
